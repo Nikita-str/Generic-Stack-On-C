@@ -79,6 +79,7 @@ int main()
     //#define ELEM_DUMPABLE
 
     GENERIC_STACK_LOG(double, zd_p, 20);//hmm.. weird 12.4908... 
+    GENERIC_STACK_LOG(int, (&zi), 20);//hmm.. weird 12.4908... 
 
     return 0;
 }

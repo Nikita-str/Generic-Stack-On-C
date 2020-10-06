@@ -37,6 +37,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
 #include <stdbool.h>
 
 //+++++###############################[struct define]######################################################
@@ -110,7 +111,7 @@ typedef enum GENERIC_STACK_ENUM_VALIDATE
 #endif
 
 static
-GENERIC_STACK_ENUM_VALIDATE generic_stack_is_valid(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self)
+GENERIC_STACK_ENUM_VALIDATE generic_stack_is_valid(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self)
 {
     if (!self->ptr) {
         return GS_NOT_VALID_PTR;
@@ -122,19 +123,19 @@ GENERIC_STACK_ENUM_VALIDATE generic_stack_is_valid(GENERIC_STACK_TYPE) (generic_
 }
 //-----###############################[IS_VALID]#################################################
 
-//+++++###############################[DUMP]#####################################################
+//+++++###############################[DUMP/LOG]#################################################
 #define generic_stack_dump(T) GLUE(generic_stack_dump_, T)
 
 #define generic_stack_get_elem_dump(T) GLUE(T, _gs_elem_dump)
 #define generic_stack_elem_dump(T) GLUE(T, _gs_elem_dump)
 
-#define __GS_ONE_ELEM_DUMP(self, GS_TYPE, X_file, X_ind)    \
-fprintf(X_file, "    [%u] {", X_ind); \
-generic_stack_elem_dump(GS_TYPE)(X_file, self->ptr[X_ind]);       \
+#define __GS_ONE_ELEM_DUMP(self, GS_TYPE, X_file, X_ind)       \
+fprintf(X_file, "    [%u] {", X_ind);                          \
+generic_stack_elem_dump(GS_TYPE)(X_file, self->ptr[X_ind]);    \
 fprintf(X_file, "}\n");
 
 static
-void generic_stack_dump(GENERIC_STACK_TYPE)(generic_stack(GENERIC_STACK_TYPE) *self, FILE *generic_stack_log_file, size_t max)
+void generic_stack_dump(GENERIC_STACK_TYPE)(const generic_stack(GENERIC_STACK_TYPE) *self, FILE *generic_stack_log_file, size_t max)
 {
     if (!generic_stack_log_file) {
         generic_stack_log_file = fopen("generic_stack_log.log", "a");
@@ -144,8 +145,8 @@ void generic_stack_dump(GENERIC_STACK_TYPE)(generic_stack(GENERIC_STACK_TYPE) *s
     if (!self) { goto GS_DUMP_CLOSE_RETURN; }
     fprintf(generic_stack_log_file, "    size:%u  capasity:%u  ptr:[%p]:\n", self->size, self->capasity, self->ptr);
     if (!self->ptr) { goto GS_DUMP_CLOSE_RETURN; }
-    fprintf(generic_stack_log_file, "    {\n");
     #ifdef ELEM_DUMPABLE
+    fprintf(generic_stack_log_file, "    {\n");
     if (max != 0 && max < self->capasity + 2) {
         size_t to = max / 2;
         if (to > self->size) {
@@ -180,85 +181,14 @@ void generic_stack_dump(GENERIC_STACK_TYPE)(generic_stack(GENERIC_STACK_TYPE) *s
             __GS_ONE_ELEM_DUMP(self, GENERIC_STACK_TYPE, generic_stack_log_file, ind);
         }
     }
-    #endif
     fprintf(generic_stack_log_file, "    }\n");
+    #else
+    fprintf(generic_stack_log_file, "    no func for dump elem\n");
+    #endif
 
 GS_DUMP_CLOSE_RETURN:
     fclose(generic_stack_log_file);
 }
-
-/*
-//#define ELEM_DUMPABLE
-#ifdef ELEM_DUMPABLE
-#define GENERIC_STACK_DUMP(GS_TYPE, self, max)                                       \
-{                                                                                    \
-FILE *generic_stack_log_file = fopen("generic_stack_log.log", "a");                  \
-if (!generic_stack_log_file) { return; }                                             \
-fprintf(generic_stack_log_file, "%s: %s+%u:\n", __FILE__, __FUNCTION__, __LINE__);   \
-fprintf(generic_stack_log_file, "  [0x%p] generic_stack(%s):\n",                     \
-                                self, MACRO_TO_STR(GS_TYPE));                        \
-if (!self) { goto GS_DUMP_CLOSE_RETURN; }                                            \
-fprintf(generic_stack_log_file, "    size:%u  capasity:%u  ptr:[0x%p]:\n",           \
-                                self->size, self->capasity, self->ptr);              \
-if (!self->ptr) { goto GS_DUMP_CLOSE_RETURN; }                                       \
-fprintf(generic_stack_log_file, "    {\n");                                          \
-if (max != 0 && max < self->capasity + 2) {                                          \
-    size_t to = max / 2;                                                             \
-    if (to > self->size) {                                                           \
-        to = self->size;                                                             \
-    }                                                                                \
-    for (size_t ind = 0; ind < to; ind++) {                                          \
-        __GS_ONE_ELEM_DUMP(self, GS_TYPE, generic_stack_log_file, ind);              \
-    }                                                                                \
-    if (to * 2 < self->size) {                                                       \
-        fprintf(generic_stack_log_file, "    ...\n");                                \
-    }                                                                                \
-    size_t from = self->size - to;                                                   \
-    if (self->size < to) {                                                           \
-        from = to + 1;                                                               \
-    }                                                                                \
-    for (size_t ind = from; ind < self->size; ind++) {                               \
-        __GS_ONE_ELEM_DUMP(self, GS_TYPE, generic_stack_log_file, ind);              \
-    }                                                                                \
-                                                                                     \
-    if (self->size + 1 < self->capasity) {                                           \
-        __GS_ONE_ELEM_DUMP(self, GS_TYPE, generic_stack_log_file, self->size + 1);   \
-        if (self->size + 3 < self->capasity) {                                       \
-            fprintf(generic_stack_log_file, "    ...\n");                            \
-        }                                                                            \
-        if (self->size + 2 < self->capasity) {                                       \
-            __GS_ONE_ELEM_DUMP(self, GS_TYPE, generic_stack_log_file, self->capasity - 1); \
-        }                                                                            \
-    }                                                                                \
-                                                                                     \
-} else {                                                                             \
-    for (size_t ind = 0; ind < self->capasity; ind++) {                              \
-        __GS_ONE_ELEM_DUMP(self, GS_TYPE, generic_stack_log_file, ind);              \
-    }                                                                                \
-}                                                                                    \
-fprintf(generic_stack_log_file, "    }\n");                                          \
-                                                                                     \
-GS_DUMP_CLOSE_RETURN:                                                                \
-fclose(generic_stack_log_file);                                                      \
-}
-#else
-#define GENERIC_STACK_DUMP(GS_TYPE, self, max)                                       \
-{                                                                                    \
-FILE *generic_stack_log_file = fopen("generic_stack_log.log", "a");                  \
-if (!generic_stack_log_file) { return; }                                             \
-fprintf(generic_stack_log_file, "%s: %s+%u:\n", __FILE__, __FUNCTION__, __LINE__);   \
-fprintf(generic_stack_log_file, "  [0x%p] generic_stack(%s):\n",                     \
-                                self, MACRO_TO_STR(GS_TYPE));                        \
-if (!self) { goto GS_DUMP_CLOSE_RETURN; }                                            \
-fprintf(generic_stack_log_file, "    size:%u  capasity:%u  ptr:[0x%p]:\n",           \
-                                self->size, self->capasity, self->ptr);              \
-if (!self->ptr) { goto GS_DUMP_CLOSE_RETURN; }                                       \
-                                                                                     \
-GS_DUMP_CLOSE_RETURN:                                                                \
-fclose(generic_stack_log_file);                                                      \
-}
-#endif 
-*/
 
 #define GENERIC_STACK_LOG(GS_TYPE, self, max)                                        \
 {                                                                                    \
@@ -275,65 +205,9 @@ GENERIC_STACK_LOG(GS_TYPE, self, max);                     \
 assert(!"check log file");                                 \
 }
 
-//TODO:переделать выше через вызов функции дампа кроме строки и ...
+#define __GENERIC_STACK_AUTO_VALIDATE(self) GENERIC_STACK_AUTO_VALIDATE(GENERIC_STACK_TYPE, self, GS_MAX_DUMP)
 
-/*
-{
-    FILE *generic_stack_log_file = fopen("generic_stack_log.log", "a");
-    if (!generic_stack_log_file) { return; }
-    fprintf(generic_stack_log_file,"%s: %s+%u:\n", __FILE__, __FUNCTION__, __LINE__);
-    fprintf(generic_stack_log_file,"  [%p] generic_stack(%s):\n", self, MACRO_TO_STR(GENERIC_STACK_TYPE));
-    if (!self) { goto GS_DUMP_CLOSE_RETURN; }
-    fprintf(generic_stack_log_file, "    size:%u  capasity:%u  ptr:[%p]:\n", self->size, self->capasity, self->ptr);
-    if (!self->ptr) { goto GS_DUMP_CLOSE_RETURN; }
-    fprintf(generic_stack_log_file, "    {\n");
-    #ifdef ELEM_DUMPABLE
-    if (max != 0 && max < self->capasity + 2) {
-        size_t to = max / 2;
-        if (to > self->size) {
-            to = self->size;
-        }
-        for (size_t ind = 0; ind < to; ind++) {
-            __GS_ONE_ELEM_DUMP(self, generic_stack_log_file, ind);
-        }
-        if (to * 2 < self->size) {
-            fprintf(generic_stack_log_file, "    ...\n");
-        }
-        size_t from = self->size - to; //can overflow but it doesn't matter cause next if
-        if (self->size < to) {
-            from = to + 1;
-        }
-        for (size_t ind = from; ind < self->size; ind++) {
-            __GS_ONE_ELEM_DUMP(self, generic_stack_log_file, ind);
-        }
-
-        if (self->size + 1 < self->capasity) {
-            __GS_ONE_ELEM_DUMP(self, generic_stack_log_file, self->size + 1);
-            if (self->size + 3 < self->capasity) {
-                fprintf(generic_stack_log_file, "    ...\n");
-            }
-            if (self->size + 2 < self->capasity) {
-                __GS_ONE_ELEM_DUMP(self, generic_stack_log_file, self->capasity - 1);
-            }
-        }
-        
-    } else {
-        for (size_t ind = 0; ind < self->capasity; ind++) {
-            __GS_ONE_ELEM_DUMP(self, generic_stack_log_file, ind);
-            
-            //fprintf(generic_stack_log_file, "    [%u] {", ind);
-            //generic_stack_elem_dump(GENERIC_STACK_TYPE)(generic_stack_log_file, self->ptr[ind]);
-            //fprintf(generic_stack_log_file, "}\n");
-        }
-    }
-    #endif
-    fprintf(generic_stack_log_file, "    }\n");
-
-    GS_DUMP_CLOSE_RETURN:
-    fclose(generic_stack_log_file);
-}
-*/
-//-----###############################[DUMP]#################################################
+//-----###############################[DUMP/LOG]#################################################
 
 
 //+++++###############################[FREE]#####################################################
@@ -342,7 +216,7 @@ assert(!"check log file");                                 \
 static
 void free_generic_stack(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self)
 {
-    
+    __GENERIC_STACK_AUTO_VALIDATE(self);
     free(self->ptr);
     self->size = ~0;
     self->capasity = 0;
@@ -357,7 +231,7 @@ void free_generic_stack(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
 static
 void generic_stack_push(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self, GENERIC_STACK_TYPE elem)
 {
-
+    __GENERIC_STACK_AUTO_VALIDATE(self);
     if (self->size == self->capasity) {
         void *temp_ptr = realloc(self->ptr, self->capasity * 2);
         if (!temp_ptr) {
@@ -367,7 +241,7 @@ void generic_stack_push(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
         self->capasity *= 2;
     }
     self->ptr[self->size++] = elem;
-
+    __GENERIC_STACK_AUTO_VALIDATE(self);
 }
 
 
@@ -378,13 +252,13 @@ void generic_stack_push(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
 static
 GENERIC_STACK_TYPE generic_stack_pop(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self)
 {
-
+    __GENERIC_STACK_AUTO_VALIDATE(self);
     if (self->size == 0) {
         //TODO!use error param
         exit(1);
     } 
     return self->ptr[self->size--];
-
+    __GENERIC_STACK_AUTO_VALIDATE(self);
 }
 //-----###############################[PUSH&POP]#################################################
 
@@ -394,15 +268,15 @@ GENERIC_STACK_TYPE generic_stack_pop(GENERIC_STACK_TYPE) (generic_stack(GENERIC_
 //TODO:pragma generic_stack__
 
 static
-GENERIC_STACK_TYPE generic_stack_top(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self)
+GENERIC_STACK_TYPE generic_stack_top(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self)
 {
-
+    __GENERIC_STACK_AUTO_VALIDATE(self);
     if (self->size == 0) {
         //TODO!use error param
         exit(1);
     }
     return self->ptr[self->size];
-
+    __GENERIC_STACK_AUTO_VALIDATE(self);
 }
 //-----###############################[TOP]#################################################
 
@@ -411,9 +285,11 @@ GENERIC_STACK_TYPE generic_stack_top(GENERIC_STACK_TYPE) (generic_stack(GENERIC_
 //TODO:pragma generic_stack__
 
 static
-bool generic_stack_empty(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self)
+bool generic_stack_empty(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self)
 {
+    __GENERIC_STACK_AUTO_VALIDATE(self);
     return self->size == 0;
+    __GENERIC_STACK_AUTO_VALIDATE(self);
 }
 //-----###############################[EMPTY]#################################################
 
@@ -424,6 +300,9 @@ bool generic_stack_empty(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) 
 static
 void generic_stack_swap(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self, generic_stack(GENERIC_STACK_TYPE) *other)
 {
+    __GENERIC_STACK_AUTO_VALIDATE(self);
+    __GENERIC_STACK_AUTO_VALIDATE(other);
+
     if (self == other) {
         return;
     }
@@ -439,6 +318,9 @@ void generic_stack_swap(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
     other->size = size;
     other->capasity = capacity;
     other->ptr = ptr;
+
+    __GENERIC_STACK_AUTO_VALIDATE(other);
+    __GENERIC_STACK_AUTO_VALIDATE(self);
 }
 //-----###############################[SWAP]#################################################
 
@@ -451,8 +333,10 @@ typedef int (*comparator)(GENERIC_STACK_TYPE a, GENERIC_STACK_TYPE b);
 #define generic_stack_compare(T) GLUE(generic_stack_compare_, T)
 
 static
-int generic_stack_compare(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self, generic_stack(GENERIC_STACK_TYPE) *other)
+int generic_stack_compare(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self, const generic_stack(GENERIC_STACK_TYPE) *other)
 {
+    __GENERIC_STACK_AUTO_VALIDATE(self);
+    __GENERIC_STACK_AUTO_VALIDATE(other);
     if (self == other) {
         return 0;
     }
@@ -478,42 +362,42 @@ int generic_stack_compare(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE)
 #define generic_stack_equal(T) GLUE(generic_stack_equal_, T)
 
 static 
-bool  generic_stack_equal(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self, generic_stack(GENERIC_STACK_TYPE) *other)
+bool  generic_stack_equal(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self, const generic_stack(GENERIC_STACK_TYPE) *other)
 { return generic_stack_compare(GENERIC_STACK_TYPE)(self, other) == 0; }
 
 
 #define generic_stack_not_equal(T) GLUE(generic_stack_not_equal_, T)
 
 static
-bool  generic_stack_not_equal(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self, generic_stack(GENERIC_STACK_TYPE) *other)
+bool  generic_stack_not_equal(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self, const generic_stack(GENERIC_STACK_TYPE) *other)
 {return generic_stack_compare(GENERIC_STACK_TYPE)(self, other) != 0;}
 
 
 #define generic_stack_less(T) GLUE(generic_stack_less_, T)
 
 static
-bool  generic_stack_less(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self, generic_stack(GENERIC_STACK_TYPE) *other)
+bool  generic_stack_less(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self, const generic_stack(GENERIC_STACK_TYPE) *other)
 {return generic_stack_compare(GENERIC_STACK_TYPE)(self, other) < 0;}
 
 
 #define generic_stack_less_eq(T) GLUE(generic_stack_less_eq_, T)
 
 static
-bool  generic_stack_less_eq(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self, generic_stack(GENERIC_STACK_TYPE) *other)
+bool  generic_stack_less_eq(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self, const generic_stack(GENERIC_STACK_TYPE) *other)
 {return generic_stack_compare(GENERIC_STACK_TYPE)(self, other) <= 0;}
 
 
 #define generic_stack_more(T) GLUE(generic_stack_more_, T)
 
 static
-bool  generic_stack_more(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self, generic_stack(GENERIC_STACK_TYPE) *other)
+bool  generic_stack_more(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self, const generic_stack(GENERIC_STACK_TYPE) *other)
 {return generic_stack_compare(GENERIC_STACK_TYPE)(self, other) > 0;}
 
 
 #define generic_stack_more_eq(T) GLUE(generic_stack_more_eq_, T)
 
 static
-bool  generic_stack_more_eq(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self, generic_stack(GENERIC_STACK_TYPE) *other)
+bool  generic_stack_more_eq(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self, const generic_stack(GENERIC_STACK_TYPE) *other)
 {return generic_stack_compare(GENERIC_STACK_TYPE)(self, other) >= 0;}
 #endif
 //-----###############################[COMPARE]##############################################
