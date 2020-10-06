@@ -38,7 +38,7 @@ void int_gs_elem_dump(FILE *file, int x)
 #define GENERIC_STACK_TYPE int
 //#define/undef CAPACITY_IS_POW2
 //#define/undef COMPARABLE
-#define ELEM_DUMPABLE
+#undef ELEM_DUMPABLE
 #define COMPARABLE
 #include "GenericStack.h"
 #undef GENERIC_STACK_TYPE 
@@ -78,7 +78,7 @@ int main()
 
     //#define ELEM_DUMPABLE
 
-    GENERIC_STACK_DUMP(double, zd_p, 20);//hmm.. weird 12.4908... 
+    GENERIC_STACK_LOG(double, zd_p, 20);//hmm.. weird 12.4908... 
 
     return 0;
 }
