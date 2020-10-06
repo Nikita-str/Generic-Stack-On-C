@@ -238,6 +238,7 @@ void generic_stack_push(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
             //TODO!use error param
             exit(1);
         }
+        self->ptr = temp_ptr;
         self->capasity *= 2;
     }
     self->ptr[self->size++] = elem;
