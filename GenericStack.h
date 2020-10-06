@@ -56,7 +56,19 @@ typedef struct generic_stack(GENERIC_STACK_TYPE) generic_stack(GENERIC_STACK_TYP
 
 //+++++###############################[REAL STATIC FUNC]######################################################
 //TODO:pragma
+#ifndef GENERIC_STACK_LOG_PSOTFIX_0xEF542EH4
+#define GENERIC_STACK_LOG_PSOTFIX_0xEF542EH4
+static const GS_LOG_FNAME = "generic_stack_log.log";
 
+bool CLEAR_LOG_FILE = false;
+
+static FILE *generic_stack_log_fopen(const char *name)
+{
+    if(CLEAR_LOG_FILE)return fopen(name, "a");
+    CLEAR_LOG_FILE = true;
+    return fopen(name, "w");
+}
+#endif
 //-----###############################[REAL STATIC FUNC]######################################################
 
 //+++++###############################[NEW]######################################################
@@ -138,7 +150,7 @@ static
 void generic_stack_dump(GENERIC_STACK_TYPE)(const generic_stack(GENERIC_STACK_TYPE) *self, FILE *generic_stack_log_file, size_t max)
 {
     if (!generic_stack_log_file) {
-        generic_stack_log_file = fopen("generic_stack_log.log", "a");
+        generic_stack_log_file = generic_stack_log_fopen(GS_LOG_FNAME);
         if (!generic_stack_log_file) { return; }
     }
     fprintf(generic_stack_log_file, "  [%p] generic_stack(%s):\n", self, MACRO_TO_STR(GENERIC_STACK_TYPE));
@@ -192,7 +204,7 @@ GS_DUMP_CLOSE_RETURN:
 
 #define GENERIC_STACK_LOG(GS_TYPE, self, max)                                        \
 {                                                                                    \
-    FILE *generic_stack_log_file = fopen("generic_stack_log.log", "a");              \
+    FILE *generic_stack_log_file = generic_stack_log_fopen(GS_LOG_FNAME);            \
     if (generic_stack_log_file) {                                                    \
     fprintf(generic_stack_log_file, "%s: %s+%u:\n", __FILE__, __FUNCTION__, __LINE__);  \
     generic_stack_dump(GS_TYPE)(self, generic_stack_log_file, max);                  \
@@ -233,12 +245,12 @@ void generic_stack_push(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
 {
     __GENERIC_STACK_AUTO_VALIDATE(self);
     if (self->size == self->capasity) {
-        void *temp_ptr = realloc(self->ptr, self->capasity * 2);
+        void *temp_ptr = realloc(self->ptr, sizeof(GENERIC_STACK_TYPE) * self->capasity * 2);
         if (!temp_ptr) {
             //TODO!use error param
             exit(1);
         }
-        self->ptr = temp_ptr;
+        self->ptr = (GENERIC_STACK_TYPE *)temp_ptr;
         self->capasity *= 2;
     }
     self->ptr[self->size++] = elem;
