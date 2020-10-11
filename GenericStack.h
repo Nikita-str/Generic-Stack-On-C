@@ -89,18 +89,23 @@
 #ifndef GENERIC_STACK_CANARY_TYPE_PSOTFIX_0xBc4feJ
 #define GENERIC_STACK_CANARY_TYPE_PSOTFIX_0xBc4feJ
 typedef unsigned long long canary_t;
+typedef unsigned long long hash_t;
 #endif
 
-static 
 struct generic_stack(GENERIC_STACK_TYPE)
 {
     #ifdef CANARY_FOR_STRUCT
     canary_t left_canary;
     //canary_t left_sweet_wine_from_some_islands; one of definitions of the word canary: "canary is a sweet wine from the Canary Islands, similar to Madeira."
     #endif
+    #ifdef HASH_STRUCT
+    hash_t hash;
+    #endif
+
     size_t size;
     size_t capañity;
-    GENERIC_STACK_TYPE *ptr;
+    GENERIC_STACK_TYPE *ptr; //TODO:ptr on special struct
+ 
     #ifdef CANARY_FOR_STRUCT
     canary_t right_canary;
     #endif
@@ -110,10 +115,9 @@ typedef struct generic_stack(GENERIC_STACK_TYPE) generic_stack(GENERIC_STACK_TYP
 //-----###############################[struct define]######################################################
 
 //+++++###############################[REAL STATIC FUNC]######################################################
-//TODO:pragma
 #ifndef GENERIC_STACK_LOG_PSOTFIX_0xEF542EH4
 #define GENERIC_STACK_LOG_PSOTFIX_0xEF542EH4
-static const GS_LOG_FNAME = "generic_stack_log.log";
+static const char *GS_LOG_FNAME = "generic_stack_log.log";
 
 bool CLEAR_LOG_FILE = false;
 
@@ -125,6 +129,120 @@ static FILE *generic_stack_log_fopen(const char *name)
 }
 #endif
 //-----###############################[REAL STATIC FUNC]######################################################
+
+//+++++###############################[HASHS:real static]#################################################
+#if defined(HASH_STRUCT) || defined(HASH_DATA)
+
+#ifndef GENERIC_STACK_HASH_PSOTFIX_0xCFv54sC4dd
+#define GENERIC_STACK_HASH_PSOTFIX_0xCFv54sC4dd
+
+static inline hash_t __gs_help_get_mem_hash(char *ptr8byte, size_t index)
+{
+    //TODO:DEL+
+    unsigned char check[8] = {ptr8byte[0], ptr8byte[1],ptr8byte[2],ptr8byte[3],ptr8byte[4],ptr8byte[5],ptr8byte[6],ptr8byte[7]};
+    //TODO:DEL-
+    char *cptr = ptr8byte;
+    const SZ = 64; // min for hash_t(ULL) (sizeof(hash_t) * CHAR_BIT);
+    const GS_ONE_BYTE_MASK = 0xFF;
+
+    const GS_SP_MASK_1_0 = 0x73;
+    const GS_SP_MASK_1_1 = 0x8C;
+
+    const GS_HASH_MASK_0 = 0x9A;
+    const GS_HASH_MASK_3 = 0xD5;
+    const GS_HASH_MASK_6 = 0x5C;
+    const GS_HASH_MASK_2 = 0x33;
+    const GS_HASH_MASK_15 = 0xAA;
+    const GS_HASH_MASK_47 = 0x55;
+
+    hash_t now = 0;
+    now ^= ((hash_t)((cptr[0] ^ GS_HASH_MASK_0) ^ (cptr[3] ^ GS_HASH_MASK_3))) << 5;
+    now ^= ((hash_t)((cptr[6] ^ GS_HASH_MASK_6) ^ (cptr[2] ^ GS_HASH_MASK_2)));
+    now ^= ((hash_t)((cptr[1] | cptr[5]) ^ GS_HASH_MASK_15)) << 18;
+    now ^= ((hash_t)((cptr[4] | ((cptr[7] << 3) & GS_ONE_BYTE_MASK) | (cptr[7] >> 6)) ^ GS_HASH_MASK_47)) << 12;
+    now ^= ((hash_t)((cptr[3] & GS_SP_MASK_1_0) | (cptr[6] & GS_SP_MASK_1_1))) << 24;
+
+    now ^= ((hash_t)((cptr[2] ^ GS_HASH_MASK_3) ^ ((cptr[4] << 2) & GS_ONE_BYTE_MASK) ^ (cptr[4] >> 6))) << 39;
+    now ^= ((hash_t)((cptr[1] & GS_HASH_MASK_15) ^ (cptr[7] & GS_HASH_MASK_0) ^ ((cptr[5] >> 3) | ((cptr[5] << 5) & GS_ONE_BYTE_MASK)))) << 43;
+    now ^= ((hash_t)(cptr[0] ^ (cptr[7] << 5) ^ (cptr[7] >> 4) ^ (cptr[3] << 3) ^ (cptr[3] >> 2))) << 56;
+    now ^= ((hash_t)(((cptr[5] << 2) & GS_ONE_BYTE_MASK) ^ GS_HASH_MASK_3 ^ (cptr[5] >> 4) ^ (cptr[2] >> 1))) << 49;
+
+    now ^= ((hash_t)(((cptr[3] << 3) & GS_ONE_BYTE_MASK) ^ GS_HASH_MASK_6 ^ (cptr[3] >> 2) ^ cptr[1])) << 31;
+    now ^= ((hash_t)(((cptr[4] << 3) & GS_ONE_BYTE_MASK) ^ (cptr[6] >> 2) ^ cptr[0])) << 36;
+
+    size_t sh = index % SZ;
+    now = ((now << sh) | (now >> (SZ - sh))); // ROL now, sh
+    return now;
+}
+
+//MAYBE:(it makes sense to) make this function faster
+static hash_t gs_get_mem_hash(const void *ptr, size_t mem_from, size_t mem_to)
+{
+    assert(ptr);
+    assert(mem_from <= mem_to);
+    if (mem_from == mem_to) return 0;
+
+    hash_t ret = 0;
+
+    const char *cptr = ptr;
+
+    size_t first_ind = mem_from / sizeof(hash_t);
+    size_t last_ind = mem_to / sizeof(hash_t);
+
+    size_t sh_first = mem_from % sizeof(hash_t);
+    if (sh_first) {
+        char first_cptr[8] = {0,};
+        for (size_t i = sh_first; i < sizeof(hash_t); i++) {
+            first_cptr[i] = cptr[first_ind + i];
+        }
+        ret ^= __gs_help_get_mem_hash(first_cptr, first_ind);
+    }
+
+    for (size_t i = first_ind; i < last_ind; i++) {
+        ret = ret ^ __gs_help_get_mem_hash(cptr, i);
+        cptr += sizeof(ret);
+    }
+
+    char last_cptr[8] = {0,};
+    size_t from = last_ind * sizeof(hash_t);
+    assert(mem_to - from < sizeof(hash_t));
+    for (size_t i = from, n = 0; i < mem_to; i++, n++) {
+        last_cptr[n] = cptr[n];
+    }
+    ret = ret ^ __gs_help_get_mem_hash(last_cptr, last_ind);
+
+    return ret;
+}
+
+//yes, gs_mem_hash_delete and gs_mem_hash_add do exactly the same
+
+static hash_t gs_mem_hash_delete(hash_t hash, const void *ptr, size_t delete_from, size_t delete_to)
+{
+    assert(ptr);
+    assert(delete_from <= delete_to);
+    if (delete_from == delete_to) return hash;
+
+    return hash ^ gs_get_mem_hash(ptr, delete_from, delete_to);
+}
+
+static hash_t gs_mem_hash_add(hash_t hash, const void *ptr, size_t add_from, size_t add_to)
+{
+    assert(ptr);
+    assert(add_from <= add_to);
+    if (add_from == add_to) return hash;
+    return hash ^ gs_get_mem_hash(ptr, add_from, add_to);
+}
+
+static bool gs_mem_hash_is_valid(hash_t hash, const void *ptr, size_t mem_from, size_t mem_to)
+{
+    assert(ptr);
+    assert(mem_from <= mem_to);
+
+    return hash == gs_get_mem_hash(ptr, mem_from, mem_to);
+}
+#endif
+#endif
+//-----###############################[HASHS:real static]#################################################
 
 //+++++###############################[NEW]######################################################
 
@@ -193,6 +311,11 @@ generic_stack(GENERIC_STACK_TYPE) new_generic_stack(GENERIC_STACK_TYPE) (size_t 
         exit(1);
     }
     stack.capañity = capacity;
+
+    #ifdef HASH_STRUCT
+    stack.hash = gs_get_mem_hash(&(stack.size), 0, ((char *)&stack.ptr) - ((char *)&stack.size) + sizeof(stack.ptr)); // cast to (char *) is otional (it make warning from compiler)
+    #endif
+
     return stack;
 }
 
@@ -256,6 +379,8 @@ typedef enum GENERIC_STACK_ENUM_VALIDATE
     GS_LEFT_DATA_CANARY_NOT_VALID,
     GS_RIGHT_DATA_CANARY_NOT_VALID,
     GS_LR_DATA_CANARY_NOT_VALID,
+    //hash:
+    GS_HASH_STRUCT_NOT_VALID,
 }GENERIC_STACK_ENUM_VALIDATE;
 #endif
 
@@ -365,6 +490,12 @@ GENERIC_STACK_ENUM_VALIDATE generic_stack_is_valid(GENERIC_STACK_TYPE) (const ge
     if (valid_data_canary != GS_VALID) return valid_data_canary;
     #endif
 
+    #ifdef HASH_STRUCT
+    if (!gs_mem_hash_is_valid(self->hash, &(self->size), 0, ((char *)&self->ptr) - ((char *)&self->size) + sizeof(self->ptr))) {
+        return GS_HASH_STRUCT_NOT_VALID;
+    }
+    #endif 
+
     return GS_VALID;
 }
 
@@ -384,7 +515,6 @@ void generic_stack_make_valid_canary(GENERIC_STACK_TYPE) (generic_stack(GENERIC_
 #define generic_stack_get_elem_dump(T) GLUE(T, _gs_elem_dump)
 #define generic_stack_elem_dump(T) GLUE(T, _gs_elem_dump)
 
-//TODO:'\t'
 #define __GS_ONE_ELEM_DUMP(self, GS_TYPE, X_file, X_ind)       \
 fprintf(X_file, "    [%u] {", X_ind);                          \
 generic_stack_elem_dump(GS_TYPE)(X_file, self->ptr[X_ind]);    \
@@ -429,6 +559,15 @@ void generic_stack_dump(GENERIC_STACK_TYPE)(const generic_stack(GENERIC_STACK_TY
                                             MACRO_TO_STR(generic_stack_valid_canary(GENERIC_STACK_TYPE)));
     }
     #endif
+
+    #ifdef HASH_STRUCT
+    if (!gs_mem_hash_is_valid(self->hash, &(self->size), 0, ((char *)&self->ptr) - ((char *)&self->size) + sizeof(self->ptr))) {
+        fprintf(generic_stack_log_file, "    [NOT VLAD]:hash of struct\n");
+    } else {
+        fprintf(generic_stack_log_file, "    [valid]:hash of struct\n");
+    }
+    #endif
+
 
     if (!self->ptr) { goto GS_DUMP_CLOSE_RETURN; }
     #ifdef CANARY_FOR_DATA
@@ -527,7 +666,7 @@ assert(!"check log file");                                 \
 }//TODO:if!assert (get generic_stack_is_valid
 //return ret_value ;                after assert i.e. it was shifted here from line afeter assert and before }                         \
 
-#define __GENERIC_STACK_AUTO_VALIDATE(self, ret_value) GENERIC_STACK_AUTO_VALIDATE(GENERIC_STACK_TYPE, self, GS_MAX_DUMP)
+#define __GENERIC_STACK_AUTO_VALIDATE(self) GENERIC_STACK_AUTO_VALIDATE(GENERIC_STACK_TYPE, self, GS_MAX_DUMP)
 #define __GENERIC_STACK_AUTO_VALIDATE_VOIDF(self) GENERIC_STACK_AUTO_VALIDATE(GENERIC_STACK_TYPE, self, GS_MAX_DUMP)
 
 //-----###############################[DUMP/LOG]#################################################
@@ -545,7 +684,7 @@ void free_generic_stack(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
     //TODO:ADD #ifdef ?WITH_BREAK_STRUCT? FOR SPEED UP:
     self->size = ~0 ^ 0xA35;
     self->capañity = 0x55;
-    self->ptr = NULL; //TODO:paranoic:check:NULL
+    self->ptr = NULL;
     #ifdef CANARY_FOR_STRUCT
     self->left_canary = SPECIAL_BAD_CANARY;
     self->right_canary = SPECIAL_BAD_CANARY;
@@ -555,7 +694,6 @@ void free_generic_stack(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
 
 //+++++###############################[PUSH&POP]#################################################
 #define generic_stack_push(T) GLUE(generic_stack_push_, T)
-//TODO:pragma generic_stack__
 
 static
 void generic_stack_push(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self, GENERIC_STACK_TYPE elem)
@@ -592,13 +730,16 @@ void generic_stack_push(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
         }
     }
     self->ptr[self->size++] = elem;
+
+    #ifdef HASH_STRUCT
+    self->hash = gs_get_mem_hash(&(self->size), 0, ((char *)&self->ptr) - ((char *)&self->size) + sizeof(self->ptr));
+    #endif
     __GENERIC_STACK_AUTO_VALIDATE_VOIDF(self);
 }
 
 
 
 #define generic_stack_pop(T) GLUE(generic_stack_pop_, T)
-//TODO:pragma generic_stack__pop
 
 static
 GENERIC_STACK_TYPE generic_stack_pop(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self)
@@ -608,15 +749,21 @@ GENERIC_STACK_TYPE generic_stack_pop(GENERIC_STACK_TYPE) (generic_stack(GENERIC_
         //TODO!use error param
         exit(1);
     } 
-    return self->ptr[self->size--];
+    #ifdef HASH_STRUCT
+        self->hash = gs_mem_hash_delete(self->hash, &(self->size), 0, sizeof(self->size));
+    #endif
+    GENERIC_STACK_TYPE ret = self->ptr[self->size--];
+    #ifdef HASH_STRUCT
+    self->hash = gs_mem_hash_add(self->hash, &(self->size), 0, sizeof(self->size));
+    #endif
     __GENERIC_STACK_AUTO_VALIDATE(self);
+    return ret;
 }
 //-----###############################[PUSH&POP]#################################################
 
 
 //+++++###############################[TOP]#################################################
 #define generic_stack_top(T) GLUE(generic_stack_top_, T)
-//TODO:pragma generic_stack__
 
 static
 GENERIC_STACK_TYPE generic_stack_top(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self)
@@ -626,14 +773,13 @@ GENERIC_STACK_TYPE generic_stack_top(GENERIC_STACK_TYPE) (const generic_stack(GE
         //TODO!use error param
         exit(1);
     }
-    return self->ptr[self->size];
     __GENERIC_STACK_AUTO_VALIDATE(self);
+    return self->ptr[self->size];
 }
 //-----###############################[TOP]#################################################
 
 //+++++###############################[EMPTY]#################################################
 #define generic_stack_empty(T) GLUE(generic_stack_empty_, T)
-//TODO:pragma generic_stack__
 
 static
 bool generic_stack_empty(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self)
@@ -645,7 +791,6 @@ bool generic_stack_empty(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_
 
 //+++++###############################[SWAP]#################################################
 #define generic_stack_swap(T) GLUE(generic_stack_swap_, T)
-//TODO:pragma generic_stack__
 
 static
 void generic_stack_swap(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self, generic_stack(GENERIC_STACK_TYPE) *other)
@@ -688,7 +833,7 @@ void generic_stack_swap(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
 
 //+++++###############################[COMPARE]##############################################
 #ifdef COMPARABLE
-typedef int (*comparator)(GENERIC_STACK_TYPE a, GENERIC_STACK_TYPE b);
+//typedef int (*comparator)(GENERIC_STACK_TYPE a, GENERIC_STACK_TYPE b); //commented by cause compiler worning
 
 #define generic_stack_get_comparator(T) GLUE(T, _gs_comparator)
 
@@ -702,11 +847,10 @@ int generic_stack_compare(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK
     if (self == other) {
         return 0;
     }
-    static comparator cmpr = generic_stack_get_comparator(GENERIC_STACK_TYPE);//TODO
 
     size_t to = (self->size <= other->size) ? self->size : other->size;
     for (size_t i = 0; i < to; i++) {
-        int x = cmpr(self->ptr[i], other->ptr[i]);
+        int x = generic_stack_get_comparator(GENERIC_STACK_TYPE)(self->ptr[i], other->ptr[i]);
         if (!x) return x;
     }
 

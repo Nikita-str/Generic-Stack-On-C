@@ -36,6 +36,8 @@ void int_gs_elem_dump(FILE *file, int x)
 #define CANARY_FOR_STRUCT
 #define CANARY_FS_USE_PTR
 #define CANARY_FOR_DATA
+#define HASH_STRUCT
+#define HASH_DATA
 #include "GenericStack.h"
 #undef GENERIC_STACK_TYPE 
 
@@ -60,22 +62,43 @@ void int_gs_elem_dump(FILE *file, int x)
 int main()
 {
     generic_stack_double *zd = new_generic_stack_ptr(double)(5);
+    /*
+    hash_t hash_0 = gs_get_mem_hash(&zd->size, 0, ((char *)&zd->ptr) - ((char *)&zd->size) + sizeof(zd->ptr));
+    hash_t hash_1 = gs_get_mem_hash(&zd->size, 0, ((char *)&zd->ptr) - ((char *)&zd->size) + sizeof(zd->ptr));
+    if (hash_0 != hash_1) {
+        printf("oh no...\n");
+    }
+    */
     generic_stack_push(double)(zd, 13);
     generic_stack_push(double)(zd, 12.0);
     generic_stack_push(double)(zd, 11);
     generic_stack_push(double)(zd, 10);
+    generic_stack_pop(double)(zd);
+    generic_stack_pop(double)(zd);
+    //zd->size++;//crush by hash
+    generic_stack_push(double)(zd, 10);
+    generic_stack_push(double)(zd, 10);
     generic_stack_push(double)(zd, 9);
+    generic_stack_pop(double)(zd);
     generic_stack_push(double)(zd, 8);
     generic_stack_push(double)(zd, 7);
+    generic_stack_push(double)(zd, 6);
+    generic_stack_push(double)(zd, 5.32);
+    generic_stack_pop(double)(zd);
+    generic_stack_push(double)(zd, 5.30);
+    generic_stack_push(double)(zd, 5.27);
+    generic_stack_push(double)(zd, 5.21);
+    generic_stack_push(double)(zd, 11.21);
+    generic_stack_push(double)(zd, 13.212);
     generic_stack_double *zd2 = new_generic_stack_ptr_double(77);
     generic_stack(double) zd3 = new_generic_stack_double(77);
     generic_stack_make_valid_canary(double)(&zd3);
     generic_stack(int) zi = new_generic_stack_int(7);
     generic_stack(int) zi2 = new_generic_stack_int(17);
 
-    generic_stack_empty(double)(zd);//but we can calculate (double) on compile time! so use ?pragma?  \
-                                       but declaration depends on lang so not pragma, but one abstract \
-                                       lang next level that will be translated to .c
+    generic_stack_empty(double)(zd);// but we can calculate (double) on compile time! so use ?pragma?  
+                                    // but declaration depends on lang so not pragma, but one abstract 
+                                    // lang next level that will be translated to .c
 
     printf("%d\n",generic_stack_compare(double)(zd, zd2));
     printf("%d\n",generic_stack_compare(double)(zd, &zd3));
