@@ -104,7 +104,7 @@ struct generic_stack(GENERIC_STACK_TYPE)
 
     size_t size;
     size_t capañity;
-    GENERIC_STACK_TYPE *ptr; //TODO:ptr on special struct
+    GENERIC_STACK_TYPE *ptr;
  
     #ifdef CANARY_FOR_STRUCT
     canary_t right_canary;
@@ -198,19 +198,21 @@ static hash_t gs_get_mem_hash(const void *ptr, size_t mem_from, size_t mem_to)
         ret ^= __gs_help_get_mem_hash(first_cptr, first_ind);
     }
 
+    cptr += sizeof(ret) * first_ind;
     for (size_t i = first_ind; i < last_ind; i++) {
         ret = ret ^ __gs_help_get_mem_hash(cptr, i);
         cptr += sizeof(ret);
     }
 
-    char last_cptr[8] = {0,};
     size_t from = last_ind * sizeof(hash_t);
     assert(mem_to - from < sizeof(hash_t));
-    for (size_t i = from, n = 0; i < mem_to; i++, n++) {
-        last_cptr[n] = cptr[n];
+    if (from != mem_to) {
+        char last_cptr[8] = {0,};
+        for (size_t i = from, n = 0; i < mem_to; i++, n++) {
+            last_cptr[n] = cptr[n];
+        }
+        ret = ret ^ __gs_help_get_mem_hash(last_cptr, last_ind);
     }
-    ret = ret ^ __gs_help_get_mem_hash(last_cptr, last_ind);
-
     return ret;
 }
 
@@ -263,12 +265,17 @@ GENERIC_STACK_TYPE *__generic_stack_calloc(GENERIC_STACK_TYPE) (size_t capacity)
 {
     GENERIC_STACK_TYPE *ptr = NULL;
     if (capacity) {
+        //TODO:ADD:HASH
         #ifdef CANARY_FOR_DATA
-        size_t needable_byte = sizeof(GENERIC_STACK_TYPE) * capacity + sizeof(canary_t) * 2;
+        size_t add_size = sizeof(canary_t) * 2;
+        #ifdef HASH_DATA
+        add_size += sizeof(hash_t);
+        #endif
+        size_t needable_byte = sizeof(GENERIC_STACK_TYPE) * capacity + add_size;
         void *data_ptr = calloc(capacity, needable_byte);
         if (!data_ptr) { exit(1); }
         ((canary_t *)data_ptr)[0] = LEFT_CANARY;
-        ptr = (GENERIC_STACK_TYPE *)((char *)data_ptr + sizeof(canary_t));
+        ptr = (GENERIC_STACK_TYPE *)((char *)data_ptr + add_size - sizeof(canary_t));
         ((canary_t *)(ptr + capacity))[0] = RIGHT_CANARY;
         #else
         ptr = calloc(capacity, sizeof(GENERIC_STACK_TYPE));
@@ -380,7 +387,8 @@ typedef enum GENERIC_STACK_ENUM_VALIDATE
     GS_RIGHT_DATA_CANARY_NOT_VALID,
     GS_LR_DATA_CANARY_NOT_VALID,
     //hash:
-    GS_HASH_STRUCT_NOT_VALID,
+    GS_STRUCT_HASH_NOT_VALID,
+    GS_DATA_HASH_NOT_VALID,
 }GENERIC_STACK_ENUM_VALIDATE;
 #endif
 
@@ -436,9 +444,12 @@ GENERIC_STACK_ENUM_VALIDATE __generic_stack_valid_data_canary(GENERIC_STACK_TYPE
 
     int canary_valid = 0b11;
 
+    #ifdef HASH_DATA
+    canary_t left_canary = ((canary_t *)(((hash_t *)self->ptr) - 1))[-1];
+    #else
     canary_t left_canary = ((canary_t *) self->ptr)[-1];
+    #endif
     canary_t right_canary = ((canary_t *) (self->ptr + self->capañity))[0];
-    
 
     //this is separate case cause it's suspicious:
     canary_valid ^= ((left_canary != SPECIAL_BAD_CANARY)) + ((right_canary != SPECIAL_BAD_CANARY) << 1);
@@ -492,9 +503,16 @@ GENERIC_STACK_ENUM_VALIDATE generic_stack_is_valid(GENERIC_STACK_TYPE) (const ge
 
     #ifdef HASH_STRUCT
     if (!gs_mem_hash_is_valid(self->hash, &(self->size), 0, ((char *)&self->ptr) - ((char *)&self->size) + sizeof(self->ptr))) {
-        return GS_HASH_STRUCT_NOT_VALID;
+        return GS_STRUCT_HASH_NOT_VALID;
     }
     #endif 
+
+    #ifdef HASH_DATA
+    hash_t hash_data = ((hash_t *)self->ptr)[-1];
+    if (!gs_mem_hash_is_valid(hash_data, self->ptr, 0, sizeof(*self->ptr) * self->size)) {
+        return GS_DATA_HASH_NOT_VALID;
+    }
+    #endif
 
     return GS_VALID;
 }
@@ -533,6 +551,9 @@ void generic_stack_dump(GENERIC_STACK_TYPE)(const generic_stack(GENERIC_STACK_TY
     #ifdef CANARY_FOR_STRUCT
     GENERIC_STACK_ENUM_VALIDATE valid_canary = GS_VALID;
     valid_canary = __generic_stack_valid_canary(GENERIC_STACK_TYPE)(self);
+    if (valid_canary != GS_VALID) {
+        fprintf(generic_stack_log_file, "    [NOT VALID]:\n");
+    }
     switch (valid_canary) {
     case GS_LEFT_CANARY_DELIBERATELY_NOT_VALID:
         fprintf(generic_stack_log_file, "    for struct: only left canary deliberately not valid\n    it is suspicious\n");
@@ -553,7 +574,7 @@ void generic_stack_dump(GENERIC_STACK_TYPE)(const generic_stack(GENERIC_STACK_TY
         fprintf(generic_stack_log_file, "    for struct: left and right canary not valid => data may not be valid\n");
         break;
     case GS_VALID:
-        fprintf(generic_stack_log_file, "    struct canaries is valid\n");
+        fprintf(generic_stack_log_file, "    [valid]:struct canaries\n");
         break;
     default:fprintf(generic_stack_log_file, "    for struct: something really strange happened\n    function %s not valid ! IMPORTANT\n", 
                                             MACRO_TO_STR(generic_stack_valid_canary(GENERIC_STACK_TYPE)));
@@ -562,7 +583,7 @@ void generic_stack_dump(GENERIC_STACK_TYPE)(const generic_stack(GENERIC_STACK_TY
 
     #ifdef HASH_STRUCT
     if (!gs_mem_hash_is_valid(self->hash, &(self->size), 0, ((char *)&self->ptr) - ((char *)&self->size) + sizeof(self->ptr))) {
-        fprintf(generic_stack_log_file, "    [NOT VLAD]:hash of struct\n");
+        fprintf(generic_stack_log_file, "    [NOT VALID]:hash of struct\n");
     } else {
         fprintf(generic_stack_log_file, "    [valid]:hash of struct\n");
     }
@@ -573,6 +594,9 @@ void generic_stack_dump(GENERIC_STACK_TYPE)(const generic_stack(GENERIC_STACK_TY
     #ifdef CANARY_FOR_DATA
     GENERIC_STACK_ENUM_VALIDATE valid_data_canary = GS_VALID;
     valid_data_canary = __generic_stack_valid_data_canary(GENERIC_STACK_TYPE)(self);
+    if (valid_data_canary != GS_VALID) {
+        fprintf(generic_stack_log_file, "    [NOT VALID]:\n");
+    }
     switch (valid_data_canary) {
     case GS_LEFT_DATA_CANARY_DELIBERATELY_NOT_VALID:
         fprintf(generic_stack_log_file, "    for data: only left canary deliberately not valid\n    it is suspicious\n");
@@ -593,10 +617,18 @@ void generic_stack_dump(GENERIC_STACK_TYPE)(const generic_stack(GENERIC_STACK_TY
         fprintf(generic_stack_log_file, "    for data: left and right canary not valid => data may not be valid\n");
         break;
     case GS_VALID: 
-        fprintf(generic_stack_log_file, "    data canaries is valid\n");
+        fprintf(generic_stack_log_file, "    [valid]:data canaries\n");
         break;
     default:fprintf(generic_stack_log_file, "    for data: something really strange happened\n    function %s not valid ! IMPORTANT\n",
         MACRO_TO_STR(generic_stack_valid_canary(GENERIC_STACK_TYPE)));
+    }
+    #endif
+    #ifdef HASH_DATA
+    hash_t hash_data = ((hash_t *)self->ptr)[-1];
+    if (!gs_mem_hash_is_valid(hash_data, self->ptr, 0, sizeof(*self->ptr) * self->size)) {
+        fprintf(generic_stack_log_file, "    [NOT VALID]:hash of data\n");
+    } else {
+        fprintf(generic_stack_log_file, "    [valid]:hash of data\n");
     }
     #endif
 
@@ -710,17 +742,25 @@ void generic_stack_push(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
             void *temp_ptr = NULL;
 
             #ifdef CANARY_FOR_DATA
-            size_t needable_byte = sizeof(GENERIC_STACK_TYPE) * new_capacity + sizeof(canary_t) * 2;
-            temp_ptr = realloc(((canary_t *)self->ptr) - 1, needable_byte);
+            size_t add_size = sizeof(canary_t) * 2;
+            #ifdef HASH_DATA
+            add_size += sizeof(hash_t);
+            #endif
+            size_t needable_byte = sizeof(GENERIC_STACK_TYPE) * new_capacity + add_size;
+            void *realloc_ptr = ((canary_t *)self->ptr) - 1;
+            #ifdef HASH_DATA
+            realloc_ptr = ((hash_t *)realloc_ptr) - 1; // order is not important
+            #endif
+            temp_ptr = realloc(realloc_ptr, needable_byte);
             #else
-            void *temp_ptr = realloc(self->ptr, sizeof(GENERIC_STACK_TYPE) * new_capacity);
+            temp_ptr = realloc(self->ptr, sizeof(GENERIC_STACK_TYPE) * new_capacity);
             #endif
 
             if (!temp_ptr) { exit(1); }//TODO!use error param
 
             #ifdef CANARY_FOR_DATA
             ((canary_t *)temp_ptr)[0] = LEFT_CANARY;
-            self->ptr = (GENERIC_STACK_TYPE *)((char *)temp_ptr + sizeof(canary_t));
+            self->ptr = (GENERIC_STACK_TYPE *)((char *)temp_ptr + add_size - sizeof(canary_t));
             ((canary_t *)(self->ptr + new_capacity))[0] = RIGHT_CANARY;
             #else
             self->ptr = temp_ptr;
@@ -730,6 +770,11 @@ void generic_stack_push(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
         }
     }
     self->ptr[self->size++] = elem;
+
+    #ifdef HASH_DATA
+    hash_t hash = ((hash_t *)self->ptr)[-1];
+    ((hash_t *)self->ptr)[-1] = gs_mem_hash_add(hash, self->ptr, sizeof(*self->ptr) * (self->size - 1), sizeof(*self->ptr) * self->size);
+    #endif
 
     #ifdef HASH_STRUCT
     self->hash = gs_get_mem_hash(&(self->size), 0, ((char *)&self->ptr) - ((char *)&self->size) + sizeof(self->ptr));
@@ -751,6 +796,10 @@ GENERIC_STACK_TYPE generic_stack_pop(GENERIC_STACK_TYPE) (generic_stack(GENERIC_
     } 
     #ifdef HASH_STRUCT
         self->hash = gs_mem_hash_delete(self->hash, &(self->size), 0, sizeof(self->size));
+    #endif
+    #ifdef HASH_DATA
+    hash_t hash = ((hash_t *)self->ptr)[-1];
+    ((hash_t *)self->ptr)[-1] = gs_mem_hash_delete(hash, self->ptr, sizeof(*self->ptr) * (self->size - 1), sizeof(*self->ptr) * self->size);
     #endif
     GENERIC_STACK_TYPE ret = self->ptr[self->size--];
     #ifdef HASH_STRUCT
@@ -809,6 +858,9 @@ void generic_stack_swap(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
     canary_t left_canary = self->left_canary;
     canary_t right_canary = self->right_canary;
     #endif
+    #ifdef HASH_DATA
+    hash_t hash_data = ((hash_t *)self->ptr)[-1];
+    #endif
 
     self->size = other->size;
     self->capañity = other->capañity;
@@ -817,6 +869,9 @@ void generic_stack_swap(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
     self->left_canary = other->left_canary;
     self->right_canary = other->right_canary;
     #endif
+    #ifdef HASH_DATA
+    ((hash_t *)self->ptr)[-1] = ((hash_t *)other->ptr)[-1];
+    #endif
 
     other->size = size;
     other->capañity = capacity;
@@ -824,6 +879,9 @@ void generic_stack_swap(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
     #if defined(CANARY_FOR_STRUCT) && defined(CANARY_FS_USE_PTR)
     other->left_canary = left_canary;
     other->right_canary = right_canary;
+    #endif
+    #ifdef HASH_DATA
+    ((hash_t *)other->ptr)[-1] = hash_data;
     #endif
 
     __GENERIC_STACK_AUTO_VALIDATE(other);
