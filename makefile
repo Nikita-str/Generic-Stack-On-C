@@ -1,4 +1,4 @@
-Files=code.o tests_1.o tests_2.o
+Files=code.o tests_1.o tests_2.o tests_3.o
 all: GS_Test.exe
 
 GS_Test.exe: $(Files)
@@ -7,7 +7,8 @@ GS_Test.exe: $(Files)
 %.o: %.c
 	gcc -m64 -c $< -o $@ -lm
 
-code.o: code.c tests_1.o tests_2.o  
+code.o: code.c tests_1.o tests_2.o tests_3.o
+tests_3.o: tests_3.h GenericStackConfigEnum.h GenericStack.h tests_3.c
 tests_2.o: tests_2.h GenericStackConfigEnum.h GenericStack.h tests_2.c
 tests_1.o: tests_1.h GenericStackConfigEnum.h GenericStack.h tests_1.c
 
