@@ -129,6 +129,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <limits.h>
 #include <stdbool.h>
 
 //+++++###############################[struct define]######################################################
