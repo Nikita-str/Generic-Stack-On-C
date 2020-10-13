@@ -183,6 +183,24 @@ FILE *generic_stack_log_fopen(const char *name)
     CLEAR_LOG_FILE = true;
     return fopen(name, "w");
 }
+
+static 
+size_t gs_get_suitable_capacity(size_t capacity)
+{
+    #ifdef CAPACITY_IS_POW2
+    if (capacity == 0)return 0;
+    size_t capacity_0 = capacity;
+    size_t capacity_pow2 = 1;
+    for (int i = 0; i < sizeof(capacity) * CHAR_BIT; i++) {
+        if (!capacity) { break; }
+        capacity >>= 1;
+        capacity_pow2 <<= 1;
+    }
+    if (capacity_0 && (capacity_pow2 >> 1) == capacity_0) { capacity_pow2 >>= 1; }
+    capacity = capacity_pow2;
+    #endif
+    return capacity;
+}
 #endif
 //-----###############################[NOT STATIC FUNC]######################################################
 
@@ -328,13 +346,16 @@ static void generic_stack_make_valid_canary(GENERIC_STACK_TYPE) (generic_stack(G
 #define new_generic_stack(T) GLUE(new_generic_stack_, T)
 #define new_generic_stack_ptr(T) GLUE(new_generic_stack_ptr_, T)
 #define __generic_stack_calloc(T) GLUE(__generic_stack_calloc_, T)
+#define __generic_stack_realloc(T) GLUE(__generic_stack_realloc_, T)
 
 static 
 GENERIC_STACK_TYPE *__generic_stack_calloc(GENERIC_STACK_TYPE) (size_t capacity)
 {
     GENERIC_STACK_TYPE *ptr = NULL;
     if (capacity) {
-        //TODO:ADD:HASH
+        #ifdef CAPACITY_IS_POW2
+        capacity = gs_get_suitable_capacity(capacity);
+        #endif
         #if defined(CANARY_FOR_DATA) || defined(HASH_DATA)
         size_t add_size = 0;
         size_t minus_size = 0;
@@ -365,18 +386,59 @@ GENERIC_STACK_TYPE *__generic_stack_calloc(GENERIC_STACK_TYPE) (size_t capacity)
 }
 
 static
+GENERIC_STACK_TYPE *__generic_stack_realloc(GENERIC_STACK_TYPE) (GENERIC_STACK_TYPE *ptr, size_t new_capacity)
+{
+    //if (!ptr) return NULL;
+    #ifdef CAPACITY_IS_POW2
+    new_capacity = gs_get_suitable_capacity(new_capacity);
+    #endif
+    if (!ptr) {
+        ptr = __generic_stack_calloc(GENERIC_STACK_TYPE)(new_capacity);
+        return ptr;
+    }
+
+    void *temp_ptr = NULL;
+
+    size_t add_size = 0;
+    size_t minus_size = 0;
+
+    #ifdef CANARY_FOR_DATA
+    add_size += sizeof(canary_t) * 2;
+    minus_size += sizeof(canary_t);
+    #endif
+    #ifdef HASH_DATA
+    add_size += sizeof(hash_t);
+    minus_size += sizeof(hash_t);
+    #endif
+
+    size_t needable_byte = sizeof(GENERIC_STACK_TYPE) * new_capacity + add_size;
+    void *realloc_ptr = ((char *)ptr) - minus_size;
+    if (new_capacity == 0) {
+        free(realloc_ptr);
+        ptr = NULL;
+        return ptr;
+    }
+    temp_ptr = realloc(realloc_ptr, needable_byte);
+    if (!temp_ptr) { exit(1); }
+
+    #ifdef CANARY_FOR_DATA
+    ((canary_t *)temp_ptr)[0] = LEFT_CANARY;
+    #endif
+
+    ptr = (GENERIC_STACK_TYPE *)((char *)temp_ptr + minus_size);
+    
+    #ifdef CANARY_FOR_DATA
+    ((canary_t *)(ptr + new_capacity))[0] = RIGHT_CANARY;
+    #endif
+
+    return ptr;
+}
+
+static
 generic_stack(GENERIC_STACK_TYPE) new_generic_stack(GENERIC_STACK_TYPE) (size_t capacity)
 {
     #ifdef CAPACITY_IS_POW2
-    size_t capacity_0 = capacity;
-    size_t capacity_pow2 = 1;
-    for (int i = 0; i < sizeof(capacity) * CHAR_BIT; i++) {
-        if (!capacity) { break; }
-        capacity >>= 1;
-        capacity_pow2 <<= 1;
-    }
-    if (capacity_0 && (capacity_pow2 >> 1) == capacity_0) { capacity_pow2 >>= 1; }
-    capacity = capacity_pow2;
+    capacity = gs_get_suitable_capacity(capacity);
     #endif
     generic_stack(GENERIC_STACK_TYPE) stack = {0,};
 
@@ -772,8 +834,8 @@ void generic_stack_dump(GENERIC_STACK_TYPE)(const generic_stack(GENERIC_STACK_TY
     fprintf(generic_stack_log_file, "    no func for dump elem\n");
     #endif
 
-    fprintf(generic_stack_log_file, "#####################################################################\n\n\n");
 GS_DUMP_CLOSE_RETURN:
+    fprintf(generic_stack_log_file, "#####################################################################\n\n\n");
     fclose(generic_stack_log_file);
 }
 
@@ -846,44 +908,7 @@ void generic_stack_push(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
     if (self->size == self->capacity) {
 
         size_t new_capacity = self->capacity ? self->capacity * 2 : 1;
-
-        if (new_capacity == 1) {
-            self->ptr = __generic_stack_calloc(GENERIC_STACK_TYPE)(new_capacity);
-        } else {
-            void *temp_ptr = NULL;
-
-            #if defined(CANARY_FOR_DATA) || defined(HASH_DATA)
-            size_t add_size = 0;
-            size_t minus_size = 0;
-            #ifdef CANARY_FOR_DATA
-            add_size += sizeof(canary_t) * 2;
-            minus_size += sizeof(canary_t);
-            #endif
-            #ifdef HASH_DATA
-            add_size += sizeof(hash_t);
-            minus_size += sizeof(hash_t);
-            #endif
-            size_t needable_byte = sizeof(GENERIC_STACK_TYPE) * new_capacity + add_size;
-            void *realloc_ptr = ((char *)self->ptr) - minus_size;
-            temp_ptr = realloc(realloc_ptr, needable_byte);
-            #else
-            temp_ptr = realloc(self->ptr, sizeof(GENERIC_STACK_TYPE) * new_capacity);
-            #endif
-
-            if (!temp_ptr) { exit(1); }//TODO!use error param
-
-            #if defined(CANARY_FOR_DATA) || defined(HASH_DATA)
-            #ifdef CANARY_FOR_DATA
-            ((canary_t *)temp_ptr)[0] = LEFT_CANARY;
-            #endif
-            self->ptr = (GENERIC_STACK_TYPE *)((char *)temp_ptr + minus_size);
-            #ifdef CANARY_FOR_DATA
-            ((canary_t *)(self->ptr + new_capacity))[0] = RIGHT_CANARY;
-            #endif
-            #else
-            self->ptr = temp_ptr;
-            #endif
-        }
+        self->ptr = __generic_stack_realloc(GENERIC_STACK_TYPE)(self->ptr, new_capacity);
 
         self->capacity = new_capacity;
     }
@@ -927,6 +952,31 @@ GENERIC_STACK_TYPE generic_stack_pop(GENERIC_STACK_TYPE) (generic_stack(GENERIC_
     return ret;
 }
 //-----###############################[PUSH&POP]#################################################
+
+//+++++#################################[CHANGE CAPACITY]##########################################
+#define generic_stack_set_capacity(T) GLUE(generic_stack_set_capacity_, T)
+#define generic_stack_squeeze_capacity(T) GLUE(generic_stack_squeeze_capacity_, T)
+
+static 
+void  generic_stack_set_capacity(GENERIC_STACK_TYPE)(generic_stack(GENERIC_STACK_TYPE) *self, size_t new_capacity)
+{
+    __GENERIC_STACK_AUTO_VALIDATE_BEFORE(self);
+    self->ptr = __generic_stack_realloc(GENERIC_STACK_TYPE)(self->ptr, new_capacity);
+    if (new_capacity < self->size)self->size = new_capacity;
+    new_capacity = gs_get_suitable_capacity(new_capacity);
+    self->capacity = new_capacity;
+    __GENERIC_STACK_AUTO_VALIDATE_AFTER(self);
+}
+
+static
+void  generic_stack_squeeze_capacity(GENERIC_STACK_TYPE)(generic_stack(GENERIC_STACK_TYPE) *self)
+{
+    __GENERIC_STACK_AUTO_VALIDATE_BEFORE(self);
+    self->ptr = __generic_stack_realloc(GENERIC_STACK_TYPE)(self->ptr, self->size);
+    self->capacity = gs_get_suitable_capacity(self->size);
+    __GENERIC_STACK_AUTO_VALIDATE_AFTER(self);
+}
+//-----#################################[CHANGE CAPACITY]##########################################
 
 
 //+++++###############################[TOP]#################################################
