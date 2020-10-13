@@ -1,12 +1,12 @@
 #include "tests_2.h"
 
 
-static void double_t2_gs_elem_dump(FILE *file, double x)
+void double_t2_gs_elem_dump(FILE *file, double x)
 {
     fprintf(file, " %lf ", x * 4);
 }
 
-static void int_t2_gs_elem_dump(FILE *file, int x)
+void int_t2_gs_elem_dump(FILE *file, int x)
 {
     fprintf(file, " %d ", x / 2);
 }

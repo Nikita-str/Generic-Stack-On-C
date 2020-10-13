@@ -2,6 +2,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 
+#include "GenericStackSetEmptyConfig.h"
 #include "GenericStackConfigEnum.h" //optional for #define GS_CONFIG GS_CF_CMP | GS_CF_EDUMP
 
 #define GENERIC_STACK_POSTFIX t2

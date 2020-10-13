@@ -1,6 +1,6 @@
 #include "tests_1.h"
 
-static int double_gs_comparator(double a, double b)
+int double_gs_comparator(double a, double b)
 {
     //EPS
     if (a < b)return 1;
@@ -8,19 +8,19 @@ static int double_gs_comparator(double a, double b)
     return 0;
 }
 
-static void double_gs_elem_dump(FILE *file, double x)
+void double_gs_elem_dump(FILE *file, double x)
 {
     fprintf(file, " %lf ", x);
 }
 
-static int int_gs_comparator(int a, int b)
+int int_gs_comparator(int a, int b)
 {
     //EPS
     if (a < b)return 1;
     if (a > b)return -1;
     return 0;
 }
-static void int_gs_elem_dump(FILE *file, int x)
+void int_gs_elem_dump(FILE *file, int x)
 {
     fprintf(file, " %d ", x);
 }
