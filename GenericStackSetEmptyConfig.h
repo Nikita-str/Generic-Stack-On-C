@@ -17,3 +17,5 @@
 #undef GENERIC_STACK_LOG_FILE //must be name of file
 #undef GENERIC_STACK_TYPE
 #undef GENERIC_STACK_POSTFIX
+
+#undef GS_WITH_ERROR_VALIDATE
