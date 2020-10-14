@@ -19,3 +19,4 @@ macros:
 - ELEM_DUMPABLE : allow to log stack elems, but for use it you should realise appropriate function  
 - COMPARABLE : allow to compare two stack, but for it you should realise appropriate function  
 - CANARY_FS_USE_PTR : use struct ptr in struct canaries  
+- GS_WITH_ERROR_VALIDATE : allow not fall by assert, but use error param for error tracking  
