@@ -27,12 +27,15 @@
 
 ****/
 
-//TODO:ADD:CHANGE CAPACITY
+//#define GS_WITH_ERROR_VALIDATE
 
 #ifdef GENERIC_STACK_TYPE
 //++++++++##########################[PARANOIC:UNDEFINE]###################
 
 //q.v. {NOTE:0}
+#ifndef NULL
+#define NULL ((void *)0)
+#endif
 
 #undef if 
 #undef for
@@ -43,6 +46,28 @@
 
 #undef size_t
 #undef canary_t
+
+#undef GENERIC_STACK_ENUM_VALIDATE
+
+#undef GS_VALID
+#undef GS_NOT_VALID_PTR
+#undef GS_ERROR_SIZE
+#undef GS_NOT_VALID_STRUCT
+#undef GS_LEFT_CANARY_DELIBERATELY_NOT_VALID
+#undef GS_RIGHT_CANARY_DELIBERATELY_NOT_VALID
+#undef GS_LR_CANARY_DELIBERATELY_NOT_VALID
+#undef GS_LEFT_CANARY_NOT_VALID
+#undef GS_RIGHT_CANARY_NOT_VALID
+#undef GS_LR_CANARY_NOT_VALID
+#undef GS_LEFT_DATA_CANARY_DELIBERATELY_NOT_VALID
+#undef GS_RIGHT_DATA_CANARY_DELIBERATELY_NOT_VALID
+#undef GS_LR_DATA_CANARY_DELIBERATELY_NOT_VALID
+#undef GS_LEFT_DATA_CANARY_NOT_VALID
+#undef GS_RIGHT_DATA_CANARY_NOT_VALID
+#undef GS_LR_DATA_CANARY_NOT_VALID
+#undef GS_STRUCT_HASH_NOT_VALID
+#undef GS_DATA_HASH_NOT_VALID
+#undef GS_ALLOC_ERROR
 
 //---------##########################[PARANOIC:UNDEFINE]###################
 
@@ -88,6 +113,14 @@
 
 #ifdef NDEBUG
 #define WITHOUT_AUTO_CHECK_VALID
+#define GS_WITHOUT_BREAK_STRUCT
+
+#undef CANARY_FOR_STRUCT
+#undef CANARY_FS_USE_PTR 
+#undef CANARY_FOR_DATA
+#undef HASH_STRUCT
+#undef HASH_DATA
+#undef ELEM_DUMPABLE 
 #endif
 //-------##################[DEFINE MACRO]##########################
 
@@ -213,9 +246,6 @@ size_t gs_get_suitable_capacity(size_t capacity)
 
 static inline hash_t __gs_help_get_mem_hash(const char *ptr8byte, size_t index)
 {
-    //TODO:DEL+
-    unsigned char check[8] = {ptr8byte[0], ptr8byte[1],ptr8byte[2],ptr8byte[3],ptr8byte[4],ptr8byte[5],ptr8byte[6],ptr8byte[7]};
-    //TODO:DEL-
     const char *cptr = ptr8byte;
     const int SZ = 64; // min for hash_t(ULL) (sizeof(hash_t) * CHAR_BIT);
     const int GS_ONE_BYTE_MASK = 0xFF;
@@ -334,169 +364,6 @@ static bool gs_mem_hash_is_valid(hash_t hash, const void *ptr, size_t mem_from, 
 #endif
 //-----###############################[HASHS:real static]#################################################
 
-//+++++###############################[NEW]######################################################
-
-//++ define func name:
-
-#if defined(CANARY_FOR_STRUCT) && defined(CANARY_FS_USE_PTR)
-#define generic_stack_make_valid_canary(T) GLUE(generic_stack_make_valid_canary_, T)
-static void generic_stack_make_valid_canary(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self);
-#endif
-//--
-
-#define new_generic_stack(T) GLUE(new_generic_stack_, T)
-#define new_generic_stack_ptr(T) GLUE(new_generic_stack_ptr_, T)
-#define __generic_stack_calloc(T) GLUE(__generic_stack_calloc_, T)
-#define __generic_stack_realloc(T) GLUE(__generic_stack_realloc_, T)
-
-static 
-GENERIC_STACK_TYPE *__generic_stack_calloc(GENERIC_STACK_TYPE) (size_t capacity)
-{
-    GENERIC_STACK_TYPE *ptr = NULL;
-    if (capacity) {
-        #ifdef CAPACITY_IS_POW2
-        capacity = gs_get_suitable_capacity(capacity);
-        #endif
-        #if defined(CANARY_FOR_DATA) || defined(HASH_DATA)
-        size_t add_size = 0;
-        size_t minus_size = 0;
-        #ifdef CANARY_FOR_DATA
-        minus_size = sizeof(canary_t);
-        add_size += sizeof(canary_t) * 2;
-        #endif
-        #ifdef HASH_DATA
-        add_size += sizeof(hash_t);
-        #endif
-        size_t needable_byte = sizeof(GENERIC_STACK_TYPE) * capacity + add_size;
-        void *data_ptr = calloc(1, needable_byte);
-        if (!data_ptr) { exit(1); }
-
-        #ifdef CANARY_FOR_DATA
-        ((canary_t *)data_ptr)[0] = LEFT_CANARY;
-        #endif
-        ptr = (GENERIC_STACK_TYPE *)(((char *)data_ptr) + add_size - minus_size);
-        #ifdef CANARY_FOR_DATA
-        ((canary_t *)(ptr + capacity))[0] = RIGHT_CANARY;
-        #endif
-        #else //defined(CANARY_FOR_DATA) || defined(HASH_DATA)
-        ptr = calloc(capacity, sizeof(GENERIC_STACK_TYPE));
-        if (!ptr) { exit(1); }
-        #endif
-    }
-    return ptr;
-}
-
-static
-GENERIC_STACK_TYPE *__generic_stack_realloc(GENERIC_STACK_TYPE) (GENERIC_STACK_TYPE *ptr, size_t new_capacity)
-{
-    //if (!ptr) return NULL;
-    #ifdef CAPACITY_IS_POW2
-    new_capacity = gs_get_suitable_capacity(new_capacity);
-    #endif
-    if (!ptr) {
-        ptr = __generic_stack_calloc(GENERIC_STACK_TYPE)(new_capacity);
-        return ptr;
-    }
-
-    void *temp_ptr = NULL;
-
-    size_t add_size = 0;
-    size_t minus_size = 0;
-
-    #ifdef CANARY_FOR_DATA
-    add_size += sizeof(canary_t) * 2;
-    minus_size += sizeof(canary_t);
-    #endif
-    #ifdef HASH_DATA
-    add_size += sizeof(hash_t);
-    minus_size += sizeof(hash_t);
-    #endif
-
-    size_t needable_byte = sizeof(GENERIC_STACK_TYPE) * new_capacity + add_size;
-    void *realloc_ptr = ((char *)ptr) - minus_size;
-    if (new_capacity == 0) {
-        free(realloc_ptr);
-        ptr = NULL;
-        return ptr;
-    }
-    temp_ptr = realloc(realloc_ptr, needable_byte);
-    if (!temp_ptr) { exit(1); }
-
-    #ifdef CANARY_FOR_DATA
-    ((canary_t *)temp_ptr)[0] = LEFT_CANARY;
-    #endif
-
-    ptr = (GENERIC_STACK_TYPE *)((char *)temp_ptr + minus_size);
-    
-    #ifdef CANARY_FOR_DATA
-    ((canary_t *)(ptr + new_capacity))[0] = RIGHT_CANARY;
-    #endif
-
-    return ptr;
-}
-
-static
-generic_stack(GENERIC_STACK_TYPE) new_generic_stack(GENERIC_STACK_TYPE) (size_t capacity)
-{
-    #ifdef CAPACITY_IS_POW2
-    capacity = gs_get_suitable_capacity(capacity);
-    #endif
-    generic_stack(GENERIC_STACK_TYPE) stack = {0,};
-
-    stack.ptr = __generic_stack_calloc(GENERIC_STACK_TYPE)(capacity);
-
-    #ifdef CANARY_FOR_STRUCT
-    #ifdef CANARY_FS_USE_PTR //NOT RECOMEND ! by cause possibility reallocation dat struct q.v. {NR:0}
-    stack.left_canary = LEFT_CANARY ^ (canary_t)&stack;
-    stack.right_canary = RIGHT_CANARY ^ (canary_t)&stack;
-    #else
-    stack.left_canary  = LEFT_CANARY;
-    stack.right_canary = RIGHT_CANARY;
-    #endif
-    #endif
-
-    if (capacity && !stack.ptr) {
-        //TODO!use error param
-        exit(1);
-    }
-    stack.capacity = capacity;
-
-    #ifdef HASH_STRUCT
-    stack.hash = gs_get_mem_hash(&(stack.size), 0, ((char *)&stack.ptr) - ((char *)&stack.size) + sizeof(stack.ptr)); // cast to (char *) is otional (it make warning from compiler)
-    #endif
-
-    return stack;
-}
-
-static
-generic_stack(GENERIC_STACK_TYPE) *new_generic_stack_ptr(GENERIC_STACK_TYPE) (size_t capacity)
-{
-    generic_stack(GENERIC_STACK_TYPE) *self = calloc(1, sizeof(*self));
-    *self = new_generic_stack(GENERIC_STACK_TYPE)(capacity);
-    #if defined(CANARY_FOR_STRUCT) && defined(CANARY_FS_USE_PTR)
-    generic_stack_make_valid_canary(GENERIC_STACK_TYPE)(self);
-    #endif
-    return self;
-}
-
-#define new_empty_generic_stack(T) GLUE(new_empty_generic_stack_, T)
-
-static
-generic_stack(GENERIC_STACK_TYPE) new_empty_generic_stack(GENERIC_STACK_TYPE) ()
-{
-    enum 
-    {
-        DEFAULT_CAPACITY = 
-        #ifdef NOT_REAL_EMPTY_STACK
-        NOT_REAL_EMPTY_STACK
-        #else
-        0x0
-        #endif
-    };
-    return new_generic_stack(GENERIC_STACK_TYPE)(DEFAULT_CAPACITY);
-}
-//-----###############################[NEW]######################################################
-
 //+++++###############################[IS_VALID]#################################################
 #define generic_stack_is_valid(T) GLUE(generic_stack_is_valid_, T)
 #define __generic_stack_valid_canary(T) GLUE(__generic_stack_valid_canary_, T)
@@ -509,7 +376,7 @@ generic_stack(GENERIC_STACK_TYPE) new_empty_generic_stack(GENERIC_STACK_TYPE) ()
 #ifndef GS_ENUM_VALIDATE
 #define GS_ENUM_VALIDATE
 typedef enum GENERIC_STACK_ENUM_VALIDATE
-{//TODO:paranoic undefine
+{
     GS_VALID,
     GS_NOT_VALID_PTR,
     GS_ERROR_SIZE,
@@ -531,7 +398,14 @@ typedef enum GENERIC_STACK_ENUM_VALIDATE
     //hash:
     GS_STRUCT_HASH_NOT_VALID,
     GS_DATA_HASH_NOT_VALID,
+    //mem_error:
+    GS_ALLOC_ERROR,
 }GENERIC_STACK_ENUM_VALIDATE;
+#endif
+#ifdef GS_WITH_ERROR_VALIDATE
+#define GS_LAST_PARAM , GENERIC_STACK_ENUM_VALIDATE *gs_error
+#else
+#define GS_LAST_PARAM  
 #endif
 
 //#pragma OwO real static next line
@@ -542,7 +416,7 @@ GENERIC_STACK_ENUM_VALIDATE __generic_stack_valid_canary(GENERIC_STACK_TYPE) (co
     //and macro will only worsen readability 
 
     //not need if it real private     but it don't         :|
-    if (!self) { 
+    if (!self) {
         return GS_NOT_VALID_STRUCT;
     }
 
@@ -589,9 +463,9 @@ GENERIC_STACK_ENUM_VALIDATE __generic_stack_valid_data_canary(GENERIC_STACK_TYPE
     #ifdef HASH_DATA
     canary_t left_canary = ((canary_t *)(((hash_t *)self->ptr) - 1))[-1];
     #else
-    canary_t left_canary = ((canary_t *) self->ptr)[-1];
+    canary_t left_canary = ((canary_t *)self->ptr)[-1];
     #endif
-    canary_t right_canary = ((canary_t *) (self->ptr + self->capacity))[0];
+    canary_t right_canary = ((canary_t *)(self->ptr + self->capacity))[0];
 
     //this is separate case cause it's suspicious:
     canary_valid ^= ((left_canary != SPECIAL_BAD_CANARY)) + ((right_canary != SPECIAL_BAD_CANARY) << 1);
@@ -603,7 +477,7 @@ GENERIC_STACK_ENUM_VALIDATE __generic_stack_valid_data_canary(GENERIC_STACK_TYPE
     }
     canary_valid = 0b11;
 
-    canary_valid ^= (left_canary  == LEFT_CANARY) + ((right_canary == RIGHT_CANARY) << 1);
+    canary_valid ^= (left_canary == LEFT_CANARY) + ((right_canary == RIGHT_CANARY) << 1);
     switch (canary_valid) {
     case 0b01:return GS_LEFT_DATA_CANARY_NOT_VALID;
     case 0b10:return GS_RIGHT_DATA_CANARY_NOT_VALID;
@@ -853,31 +727,267 @@ GS_DUMP_CLOSE_RETURN:
 #define __generic_stack_err_print(T) GLUE(__generic_stack_err_print, T)
 static void __generic_stack_err_print(GENERIC_STACK_TYPE)(){fprintf(stderr, "error with: "GS_GET_TYPE_NAME() "\n");}
 
-#define GENERIC_STACK_AUTO_VALIDATE(GS_TYPE, self, max, dop_print)    \
+#ifdef GS_WITH_ERROR_VALIDATE
+#define GENERIC_STACK_AUTO_VALIDATE(GS_TYPE, self, max, dop_print, type) \
+if(!gs_error)return (type){0};                                           \
+if ((*gs_error = generic_stack_is_valid(GS_TYPE)(self)) != GS_VALID) {   \
+    GENERIC_STACK_LOG(GS_TYPE, self, max, dop_print);                    \
+    __generic_stack_err_print(GENERIC_STACK_TYPE)();                     \
+    return (type){0};                                                    \
+}
+#define GENERIC_STACK_AUTO_VALIDATE_VOIDF(GS_TYPE, self, max, dop_print) \
+if(!gs_error)return;                                                     \
+if ((*gs_error = generic_stack_is_valid(GS_TYPE)(self)) != GS_VALID) {   \
+    GENERIC_STACK_LOG(GS_TYPE, self, max, dop_print);                    \
+    __generic_stack_err_print(GENERIC_STACK_TYPE)();                     \
+    return;                                                              \
+}
+//i want to write 'return;' instead 'return ret;' but someone told me that this is prohibited by the standard
+#else
+//there we dont use 'type':
+#define GENERIC_STACK_AUTO_VALIDATE(GS_TYPE, self, max, dop_print, type)  \
 if (generic_stack_is_valid(GS_TYPE)(self) != GS_VALID) {   \
 GENERIC_STACK_LOG(GS_TYPE, self, max, dop_print);          \
 __generic_stack_err_print(GENERIC_STACK_TYPE)();           \
 assert(!"check log file");                                 \
 exit(1);                                                   \
 }
+#define GENERIC_STACK_AUTO_VALIDATE_VOIDF(GS_TYPE, self, max, dop_print) GENERIC_STACK_AUTO_VALIDATE(GS_TYPE, self, max, dop_print, )
+#endif
 
 #ifdef WITHOUT_AUTO_CHECK_VALID
-#define __GENERIC_STACK_AUTO_VALIDATE_BEFORE(self)  
-#define __GENERIC_STACK_AUTO_VALIDATE_AFTER(self)  
+#define __GENERIC_STACK_AUTO_VALIDATE_BEFORE(self, type)  
+#define __GENERIC_STACK_AUTO_VALIDATE_AFTER(self, type)  
+#define __GENERIC_STACK_AUTO_VALIDATE_VOIDF_BEFORE(self)  
+#define __GENERIC_STACK_AUTO_VALIDATE_VOIDF_AFTER(self)  
 #else
-#define __GENERIC_STACK_AUTO_VALIDATE_BEFORE(self) GENERIC_STACK_AUTO_VALIDATE(GENERIC_STACK_TYPE, self, GS_MAX_DUMP, "[BEFORE FUNCTION]:")
-#define __GENERIC_STACK_AUTO_VALIDATE_AFTER(self) GENERIC_STACK_AUTO_VALIDATE(GENERIC_STACK_TYPE, self, GS_MAX_DUMP, "[AFTER FUNCTION]:")
+#define __GENERIC_STACK_AUTO_VALIDATE_BEFORE(self, type) GENERIC_STACK_AUTO_VALIDATE(GENERIC_STACK_TYPE, self, GS_MAX_DUMP, "[BEFORE FUNCTION]:", type)
+#define __GENERIC_STACK_AUTO_VALIDATE_AFTER(self, type) GENERIC_STACK_AUTO_VALIDATE(GENERIC_STACK_TYPE, self, GS_MAX_DUMP, "[AFTER FUNCTION]:", type)
+#define __GENERIC_STACK_AUTO_VALIDATE_VOIDF_BEFORE(self) GENERIC_STACK_AUTO_VALIDATE_VOIDF(GENERIC_STACK_TYPE, self, GS_MAX_DUMP, "[BEFORE FUNCTION]:")
+#define __GENERIC_STACK_AUTO_VALIDATE_VOIDF_AFTER(self) GENERIC_STACK_AUTO_VALIDATE_VOIDF(GENERIC_STACK_TYPE, self, GS_MAX_DUMP, "[AFTER FUNCTION]:")
 #endif
 //-----###############################[DUMP/LOG]#################################################
 
+//+++++###############################[NEW]######################################################
+
+//++ define func name:
+
+#if defined(CANARY_FOR_STRUCT) && defined(CANARY_FS_USE_PTR)
+#define generic_stack_make_valid_canary(T) GLUE(generic_stack_make_valid_canary_, T)
+static void generic_stack_make_valid_canary(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self);
+#endif
+//--
+
+#define new_generic_stack(T) GLUE(new_generic_stack_, T)
+#define new_generic_stack_ptr(T) GLUE(new_generic_stack_ptr_, T)
+#define __generic_stack_calloc(T) GLUE(__generic_stack_calloc_, T)
+#define __generic_stack_realloc(T) GLUE(__generic_stack_realloc_, T)
+
+#ifdef  GS_WITH_ERROR_VALIDATE
+#define GS_ALLOC_EXIT()     \
+*gs_error = GS_ALLOC_ERROR; \
+return NULL;
+#else
+#define GS_ALLOC_EXIT() exit(1);
+#endif
+
+static
+GENERIC_STACK_TYPE *__generic_stack_calloc(GENERIC_STACK_TYPE) (size_t capacity GS_LAST_PARAM)
+{
+    GENERIC_STACK_TYPE *ptr = NULL;
+    if (capacity) {
+        #ifdef CAPACITY_IS_POW2
+        capacity = gs_get_suitable_capacity(capacity);
+        #endif
+        #if defined(CANARY_FOR_DATA) || defined(HASH_DATA)
+        size_t add_size = 0;
+        size_t minus_size = 0;
+        #ifdef CANARY_FOR_DATA
+        minus_size = sizeof(canary_t);
+        add_size += sizeof(canary_t) * 2;
+        #endif
+        #ifdef HASH_DATA
+        add_size += sizeof(hash_t);
+        #endif
+        size_t needable_byte = sizeof(GENERIC_STACK_TYPE) * capacity + add_size;
+        void *data_ptr = calloc(1, needable_byte);
+        if (!data_ptr) { GS_ALLOC_EXIT(); }
+
+        #ifdef CANARY_FOR_DATA
+        ((canary_t *)data_ptr)[0] = LEFT_CANARY;
+        #endif
+        ptr = (GENERIC_STACK_TYPE *)(((char *)data_ptr) + add_size - minus_size);
+        #ifdef CANARY_FOR_DATA
+        ((canary_t *)(ptr + capacity))[0] = RIGHT_CANARY;
+        #endif
+        #else //defined(CANARY_FOR_DATA) || defined(HASH_DATA)
+        ptr = calloc(capacity, sizeof(GENERIC_STACK_TYPE));
+        if (!ptr) { GS_ALLOC_EXIT(); }
+        #endif
+    }
+    return ptr;
+}
+
+#ifdef  GS_WITH_ERROR_VALIDATE
+#define ___generic_stack_calloc(capacity, type)                  \
+__generic_stack_calloc(GENERIC_STACK_TYPE)(capacity, gs_error);  \
+if(*gs_error != GS_VALID)return (type){0};
+#else
+#define ___generic_stack_calloc(capacity, type) __generic_stack_calloc(GENERIC_STACK_TYPE)(capacity)
+#endif
+
+static
+GENERIC_STACK_TYPE *__generic_stack_realloc(GENERIC_STACK_TYPE) (GENERIC_STACK_TYPE *ptr, size_t new_capacity GS_LAST_PARAM)
+{
+    //if (!ptr) return NULL;
+    #ifdef CAPACITY_IS_POW2
+    new_capacity = gs_get_suitable_capacity(new_capacity);
+    #endif
+    if (!ptr) {
+        ptr = ___generic_stack_calloc(new_capacity, GENERIC_STACK_TYPE *);
+        return ptr;
+    }
+
+    void *temp_ptr = NULL;
+
+    size_t add_size = 0;
+    size_t minus_size = 0;
+
+    #ifdef CANARY_FOR_DATA
+    add_size += sizeof(canary_t) * 2;
+    minus_size += sizeof(canary_t);
+    #endif
+    #ifdef HASH_DATA
+    add_size += sizeof(hash_t);
+    minus_size += sizeof(hash_t);
+    #endif
+
+    size_t needable_byte = sizeof(GENERIC_STACK_TYPE) * new_capacity + add_size;
+    void *realloc_ptr = ((char *)ptr) - minus_size;
+    if (new_capacity == 0) {
+        free(realloc_ptr);
+        ptr = NULL;
+        return ptr;
+    }
+    temp_ptr = realloc(realloc_ptr, needable_byte);
+    if (!temp_ptr) {
+        GS_ALLOC_EXIT();
+    }
+
+    #ifdef CANARY_FOR_DATA
+    ((canary_t *)temp_ptr)[0] = LEFT_CANARY;
+    #endif
+
+    ptr = (GENERIC_STACK_TYPE *)((char *)temp_ptr + minus_size);
+
+    #ifdef CANARY_FOR_DATA
+    ((canary_t *)(ptr + new_capacity))[0] = RIGHT_CANARY;
+    #endif
+
+    return ptr;
+}
+#ifdef  GS_WITH_ERROR_VALIDATE
+#define ___generic_stack_realloc(ptr, capacity)                        \
+__generic_stack_realloc(GENERIC_STACK_TYPE)(ptr, capacity, gs_error);  \
+if(*gs_error != GS_VALID)return;
+#else
+#define ___generic_stack_realloc(ptr, capacity) __generic_stack_realloc(GENERIC_STACK_TYPE)(ptr, capacity)
+#endif
+
+
+#undef GS_ALLOC_EXIT()     
+
+static
+generic_stack(GENERIC_STACK_TYPE) new_generic_stack(GENERIC_STACK_TYPE) (size_t capacity GS_LAST_PARAM)
+{
+    #ifdef CAPACITY_IS_POW2
+    capacity = gs_get_suitable_capacity(capacity);
+    #endif
+    generic_stack(GENERIC_STACK_TYPE) stack = {0,};
+
+    stack.ptr = ___generic_stack_calloc(capacity, generic_stack(GENERIC_STACK_TYPE));
+
+    #ifdef CANARY_FOR_STRUCT
+    #ifdef CANARY_FS_USE_PTR //NOT RECOMEND ! by cause possibility reallocation dat struct q.v. {NR:0}
+    stack.left_canary = LEFT_CANARY ^ (canary_t)&stack;
+    stack.right_canary = RIGHT_CANARY ^ (canary_t)&stack;
+    #else
+    stack.left_canary = LEFT_CANARY;
+    stack.right_canary = RIGHT_CANARY;
+    #endif
+    #endif
+
+    if (capacity && !stack.ptr) {
+        #ifdef  GS_WITH_ERROR_VALIDATE
+        *gs_error = GS_ALLOC_ERROR;
+        return (generic_stack(GENERIC_STACK_TYPE)) { 0 };
+        #else
+        exit(1);
+        #endif
+    }
+    stack.capacity = capacity;
+
+    #ifdef HASH_STRUCT
+    stack.hash = gs_get_mem_hash(&(stack.size), 0, ((char *)&stack.ptr) - ((char *)&stack.size) + sizeof(stack.ptr)); // cast to (char *) is otional (it make warning from compiler)
+    #endif
+
+    generic_stack(GENERIC_STACK_TYPE) *self = &stack;
+    __GENERIC_STACK_AUTO_VALIDATE_AFTER(self, generic_stack(GENERIC_STACK_TYPE));
+    return stack;
+}
+
+#ifdef  GS_WITH_ERROR_VALIDATE
+#define GS_NEW_CALL(capacity) new_generic_stack(GENERIC_STACK_TYPE)(capacity, gs_error)
+#else
+#define GS_NEW_CALL(capacity) new_generic_stack(GENERIC_STACK_TYPE)(capacity)
+#endif
+
+static
+generic_stack(GENERIC_STACK_TYPE) *new_generic_stack_ptr(GENERIC_STACK_TYPE) (size_t capacity GS_LAST_PARAM)
+{
+    generic_stack(GENERIC_STACK_TYPE) *self = calloc(1, sizeof(*self));
+    *self = GS_NEW_CALL(capacity);
+    #ifdef GS_WITH_ERROR_VALIDATE
+    if (*gs_error != GS_VALID) {
+        return self;
+    }
+    #endif
+    #if defined(CANARY_FOR_STRUCT) && defined(CANARY_FS_USE_PTR)
+    generic_stack_make_valid_canary(GENERIC_STACK_TYPE)(self);
+    #endif
+    return self;
+}
+
+#define new_empty_generic_stack(T) GLUE(new_empty_generic_stack_, T)
+
+static generic_stack(GENERIC_STACK_TYPE)
+#ifdef  GS_WITH_ERROR_VALIDATE
+new_empty_generic_stack(GENERIC_STACK_TYPE) (GENERIC_STACK_ENUM_VALIDATE *gs_error)
+#else
+new_empty_generic_stack(GENERIC_STACK_TYPE) ()
+#endif
+{
+    enum
+    {
+        DEFAULT_CAPACITY =
+        #ifdef NOT_REAL_EMPTY_STACK
+        NOT_REAL_EMPTY_STACK
+        #else
+        0x0
+        #endif
+    };
+    return GS_NEW_CALL(DEFAULT_CAPACITY);
+}
+#undef GS_NEW_CALL
+//-----###############################[NEW]######################################################
 
 //+++++###############################[FREE]#####################################################
 #define free_generic_stack(T) GLUE(free_generic_stack_, T)
 
 static
-void free_generic_stack(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self)
+void free_generic_stack(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self GS_LAST_PARAM)
 {
-    __GENERIC_STACK_AUTO_VALIDATE_BEFORE(self);
+    __GENERIC_STACK_AUTO_VALIDATE_VOIDF_BEFORE(self);
     size_t minus_size = 0;
     #ifdef CANARY_FOR_DATA
     minus_size += sizeof(canary_t);
@@ -887,7 +997,7 @@ void free_generic_stack(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
     #endif
     free(((char *)self->ptr) - minus_size);
 
-    //TODO:ADD #ifdef ?WITH_BREAK_STRUCT? FOR SPEED UP:
+    #ifndef GS_WITHOUT_BREAK_STRUCT
     self->size = ~0 ^ 0xA35;
     self->capacity = 0x55;
     self->ptr = NULL;
@@ -895,6 +1005,7 @@ void free_generic_stack(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
     self->left_canary = SPECIAL_BAD_CANARY;
     self->right_canary = SPECIAL_BAD_CANARY;
     #endif
+    #endif // !GS_WITHOUT_BREAK_STRUCT
 }
 //-----###############################[FREE]#####################################################
 
@@ -902,14 +1013,14 @@ void free_generic_stack(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
 #define generic_stack_push(T) GLUE(generic_stack_push_, T)
 
 static
-void generic_stack_push(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self, GENERIC_STACK_TYPE elem)
+void generic_stack_push(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self, GENERIC_STACK_TYPE elem GS_LAST_PARAM)
 {
-    __GENERIC_STACK_AUTO_VALIDATE_BEFORE(self);
+    __GENERIC_STACK_AUTO_VALIDATE_VOIDF_BEFORE(self);
 
     if (self->size == self->capacity) {
 
         size_t new_capacity = self->capacity ? self->capacity * 2 : 1;
-        self->ptr = __generic_stack_realloc(GENERIC_STACK_TYPE)(self->ptr, new_capacity);
+        self->ptr = ___generic_stack_realloc(self->ptr, new_capacity);
 
         self->capacity = new_capacity;
     }
@@ -923,20 +1034,25 @@ void generic_stack_push(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
     #ifdef HASH_STRUCT
     self->hash = gs_get_mem_hash(&(self->size), 0, ((char *)&self->ptr) - ((char *)&self->size) + sizeof(self->ptr));
     #endif
-    __GENERIC_STACK_AUTO_VALIDATE_AFTER(self);
+    __GENERIC_STACK_AUTO_VALIDATE_VOIDF_AFTER(self);
 }
 
-
+#ifdef  GS_WITH_ERROR_VALIDATE
+#define GS_ELEM_EXIT()                            \
+*gs_error = GS_ERROR_SIZE;                        \
+return (GENERIC_STACK_TYPE) { 0 };                
+#else
+#define GS_ELEM_EXIT() exit(1);
+#endif
 
 #define generic_stack_pop(T) GLUE(generic_stack_pop_, T)
 
 static
-GENERIC_STACK_TYPE generic_stack_pop(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self)
+GENERIC_STACK_TYPE generic_stack_pop(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self GS_LAST_PARAM)
 {
-    __GENERIC_STACK_AUTO_VALIDATE_BEFORE(self);
+    __GENERIC_STACK_AUTO_VALIDATE_BEFORE(self, GENERIC_STACK_TYPE);
     if (self->size == 0) {
-        //TODO!use error param
-        exit(1);
+        GS_ELEM_EXIT();
     } 
     #ifdef HASH_STRUCT
         self->hash = gs_mem_hash_delete(self->hash, &(self->size), 0, sizeof(self->size));
@@ -949,7 +1065,7 @@ GENERIC_STACK_TYPE generic_stack_pop(GENERIC_STACK_TYPE) (generic_stack(GENERIC_
     #ifdef HASH_STRUCT
     self->hash = gs_mem_hash_add(self->hash, &(self->size), 0, sizeof(self->size));
     #endif
-    __GENERIC_STACK_AUTO_VALIDATE_AFTER(self);
+    __GENERIC_STACK_AUTO_VALIDATE_AFTER(self, GENERIC_STACK_TYPE);
     return ret;
 }
 //-----###############################[PUSH&POP]#################################################
@@ -959,23 +1075,23 @@ GENERIC_STACK_TYPE generic_stack_pop(GENERIC_STACK_TYPE) (generic_stack(GENERIC_
 #define generic_stack_squeeze_capacity(T) GLUE(generic_stack_squeeze_capacity_, T)
 
 static 
-void  generic_stack_set_capacity(GENERIC_STACK_TYPE)(generic_stack(GENERIC_STACK_TYPE) *self, size_t new_capacity)
+void  generic_stack_set_capacity(GENERIC_STACK_TYPE)(generic_stack(GENERIC_STACK_TYPE) *self, size_t new_capacity GS_LAST_PARAM)
 {
-    __GENERIC_STACK_AUTO_VALIDATE_BEFORE(self);
-    self->ptr = __generic_stack_realloc(GENERIC_STACK_TYPE)(self->ptr, new_capacity);
+    __GENERIC_STACK_AUTO_VALIDATE_VOIDF_BEFORE(self);
+    self->ptr = ___generic_stack_realloc(self->ptr, new_capacity);
     if (new_capacity < self->size)self->size = new_capacity;
     new_capacity = gs_get_suitable_capacity(new_capacity);
     self->capacity = new_capacity;
-    __GENERIC_STACK_AUTO_VALIDATE_AFTER(self);
+    __GENERIC_STACK_AUTO_VALIDATE_VOIDF_AFTER(self);
 }
 
 static
-void  generic_stack_squeeze_capacity(GENERIC_STACK_TYPE)(generic_stack(GENERIC_STACK_TYPE) *self)
+void  generic_stack_squeeze_capacity(GENERIC_STACK_TYPE)(generic_stack(GENERIC_STACK_TYPE) *self GS_LAST_PARAM)
 {
-    __GENERIC_STACK_AUTO_VALIDATE_BEFORE(self);
-    self->ptr = __generic_stack_realloc(GENERIC_STACK_TYPE)(self->ptr, self->size);
+    __GENERIC_STACK_AUTO_VALIDATE_VOIDF_BEFORE(self);
+    self->ptr = ___generic_stack_realloc(self->ptr, self->size);
     self->capacity = gs_get_suitable_capacity(self->size);
-    __GENERIC_STACK_AUTO_VALIDATE_AFTER(self);
+    __GENERIC_STACK_AUTO_VALIDATE_VOIDF_AFTER(self);
 }
 //-----#################################[CHANGE CAPACITY]##########################################
 
@@ -984,12 +1100,11 @@ void  generic_stack_squeeze_capacity(GENERIC_STACK_TYPE)(generic_stack(GENERIC_S
 #define generic_stack_top(T) GLUE(generic_stack_top_, T)
 
 static
-GENERIC_STACK_TYPE generic_stack_top(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self)
+GENERIC_STACK_TYPE generic_stack_top(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self GS_LAST_PARAM)
 {
-    __GENERIC_STACK_AUTO_VALIDATE_BEFORE(self);
+    __GENERIC_STACK_AUTO_VALIDATE_BEFORE(self, GENERIC_STACK_TYPE);
     if (self->size == 0) {
-        //TODO!use error param
-        exit(1);
+        GS_ELEM_EXIT();
     }
     return self->ptr[self->size];
 }
@@ -998,10 +1113,10 @@ GENERIC_STACK_TYPE generic_stack_top(GENERIC_STACK_TYPE) (const generic_stack(GE
 //+++++###############################[EMPTY]#################################################
 #define generic_stack_empty(T) GLUE(generic_stack_empty_, T)
 
-static
-bool generic_stack_empty(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self)
+static bool generic_stack_empty(GENERIC_STACK_TYPE) 
+(const generic_stack(GENERIC_STACK_TYPE) *self GS_LAST_PARAM)
 {
-    __GENERIC_STACK_AUTO_VALIDATE_BEFORE(self);
+    __GENERIC_STACK_AUTO_VALIDATE_BEFORE(self, bool);
     return self->size == 0;
 }
 //-----###############################[EMPTY]#################################################
@@ -1009,11 +1124,11 @@ bool generic_stack_empty(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_
 //+++++###############################[SWAP]#################################################
 #define generic_stack_swap(T) GLUE(generic_stack_swap_, T)
 
-static
-void generic_stack_swap(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *self, generic_stack(GENERIC_STACK_TYPE) *other)
+static void generic_stack_swap(GENERIC_STACK_TYPE) 
+(generic_stack(GENERIC_STACK_TYPE) *self, generic_stack(GENERIC_STACK_TYPE) *other GS_LAST_PARAM)
 {
-    __GENERIC_STACK_AUTO_VALIDATE_BEFORE(self);
-    __GENERIC_STACK_AUTO_VALIDATE_BEFORE(other);
+    __GENERIC_STACK_AUTO_VALIDATE_VOIDF_BEFORE(self);
+    __GENERIC_STACK_AUTO_VALIDATE_VOIDF_BEFORE(other);
 
     if (self == other) {
         return;
@@ -1052,8 +1167,8 @@ void generic_stack_swap(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
     ((hash_t *)other->ptr)[-1] = hash_data;
     #endif
 
-    __GENERIC_STACK_AUTO_VALIDATE_AFTER(other);
-    __GENERIC_STACK_AUTO_VALIDATE_AFTER(self);
+    __GENERIC_STACK_AUTO_VALIDATE_VOIDF_AFTER(other);
+    __GENERIC_STACK_AUTO_VALIDATE_VOIDF_AFTER(self);
 }
 //-----###############################[SWAP]#################################################
 
@@ -1065,11 +1180,20 @@ void generic_stack_swap(GENERIC_STACK_TYPE) (generic_stack(GENERIC_STACK_TYPE) *
 
 #define generic_stack_compare(T) GLUE(generic_stack_compare_, T)
 
-static
-int generic_stack_compare(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self, const generic_stack(GENERIC_STACK_TYPE) *other)
+#define GS_COMPARE_PARAMS \
+    (const generic_stack(GENERIC_STACK_TYPE) *self, const generic_stack(GENERIC_STACK_TYPE) *other GS_LAST_PARAM)
+
+#ifdef GS_WITH_ERROR_VALIDATE
+#define GS_CMP_CALL_PARAM (self, other, gs_error)
+#else
+#define GS_CMP_CALL_PARAM (self, other)
+#endif
+
+static int generic_stack_compare(GENERIC_STACK_TYPE) GS_COMPARE_PARAMS
 {
-    __GENERIC_STACK_AUTO_VALIDATE_BEFORE(self);
-    __GENERIC_STACK_AUTO_VALIDATE_BEFORE(other);
+    __GENERIC_STACK_AUTO_VALIDATE_BEFORE(self, int);
+    __GENERIC_STACK_AUTO_VALIDATE_BEFORE(other, int);
+    
     if (self == other) {
         return 0;
     }
@@ -1092,49 +1216,40 @@ int generic_stack_compare(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK
 }
 
 #define generic_stack_equal(T) GLUE(generic_stack_equal_, T)
-
-static 
-bool  generic_stack_equal(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self, const generic_stack(GENERIC_STACK_TYPE) *other)
-{ return generic_stack_compare(GENERIC_STACK_TYPE)(self, other) == 0; }
+static bool generic_stack_equal(GENERIC_STACK_TYPE) GS_COMPARE_PARAMS
+{ return generic_stack_compare(GENERIC_STACK_TYPE) GS_CMP_CALL_PARAM == 0; }
 
 
 #define generic_stack_not_equal(T) GLUE(generic_stack_not_equal_, T)
-
-static
-bool  generic_stack_not_equal(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self, const generic_stack(GENERIC_STACK_TYPE) *other)
-{return generic_stack_compare(GENERIC_STACK_TYPE)(self, other) != 0;}
+static bool generic_stack_not_equal(GENERIC_STACK_TYPE) GS_COMPARE_PARAMS
+{return generic_stack_compare(GENERIC_STACK_TYPE)GS_CMP_CALL_PARAM != 0;}
 
 
 #define generic_stack_less(T) GLUE(generic_stack_less_, T)
-
-static
-bool  generic_stack_less(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self, const generic_stack(GENERIC_STACK_TYPE) *other)
-{return generic_stack_compare(GENERIC_STACK_TYPE)(self, other) < 0;}
+static bool generic_stack_less(GENERIC_STACK_TYPE) GS_COMPARE_PARAMS
+{return generic_stack_compare(GENERIC_STACK_TYPE) GS_CMP_CALL_PARAM < 0;}
 
 
 #define generic_stack_less_eq(T) GLUE(generic_stack_less_eq_, T)
-
-static
-bool  generic_stack_less_eq(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self, const generic_stack(GENERIC_STACK_TYPE) *other)
-{return generic_stack_compare(GENERIC_STACK_TYPE)(self, other) <= 0;}
+static bool generic_stack_less_eq(GENERIC_STACK_TYPE) GS_COMPARE_PARAMS
+{return generic_stack_compare(GENERIC_STACK_TYPE) GS_CMP_CALL_PARAM <= 0;}
 
 
 #define generic_stack_more(T) GLUE(generic_stack_more_, T)
-
-static
-bool  generic_stack_more(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self, const generic_stack(GENERIC_STACK_TYPE) *other)
-{return generic_stack_compare(GENERIC_STACK_TYPE)(self, other) > 0;}
+static bool  generic_stack_more(GENERIC_STACK_TYPE) GS_COMPARE_PARAMS
+{return generic_stack_compare(GENERIC_STACK_TYPE) GS_CMP_CALL_PARAM > 0;}
 
 
 #define generic_stack_more_eq(T) GLUE(generic_stack_more_eq_, T)
+static bool  generic_stack_more_eq(GENERIC_STACK_TYPE) GS_COMPARE_PARAMS
+{return generic_stack_compare(GENERIC_STACK_TYPE) GS_CMP_CALL_PARAM >= 0;}
 
-static
-bool  generic_stack_more_eq(GENERIC_STACK_TYPE) (const generic_stack(GENERIC_STACK_TYPE) *self, const generic_stack(GENERIC_STACK_TYPE) *other)
-{return generic_stack_compare(GENERIC_STACK_TYPE)(self, other) >= 0;}
 #endif
 //-----###############################[COMPARE]##############################################
 
 //+++++################################[UNDEFS]#############################################
+#undef GS_COMPARE_PARAMS
+#undef GS_CMP_CALL_PARAM
 
 #ifdef CANARY_FOR_STRUCT
 #undef LEFT_CANARY  
