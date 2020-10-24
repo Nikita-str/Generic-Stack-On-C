@@ -16,3 +16,7 @@
 #define GS_CF_HS                    0b1000000
 #define GS_CF_HASH_DATA             0b10000000
 #define GS_CF_HD                    0b10000000
+
+#define GS_CF_WITH_ERROR_VALIDATE   0b100000000
+#define GS_CF_W_EV                  0b100000000
+

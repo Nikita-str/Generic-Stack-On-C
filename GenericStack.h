@@ -44,8 +44,13 @@
 #undef case
 #undef return
 
+//think, it better not undef, cause in Windows in std lib may be #define calloc
+#undef realloc
+#undef calloc
+
 #undef size_t
 #undef canary_t
+#undef hash_t
 
 #undef GENERIC_STACK_ENUM_VALIDATE
 
@@ -109,15 +114,20 @@
     #if (GS_CONFIG & GS_CF_HD) != 0
     #define HASH_DATA 
     #endif
+
+    #if (GS_CONFIG & GS_CF_W_EV) != 0
+    #define GS_WITH_ERROR_VALIDATE
+    #endif
 #endif
 
-#ifdef NDEBUG
+#ifdef NDEBUG  //?
 #define WITHOUT_AUTO_CHECK_VALID
 #define GS_WITHOUT_BREAK_STRUCT
 
 #undef CANARY_FOR_STRUCT
 #undef CANARY_FS_USE_PTR 
 #undef CANARY_FOR_DATA
+#undef CANARY_FD_USE_PTR
 #undef HASH_STRUCT
 #undef HASH_DATA
 #undef ELEM_DUMPABLE 
@@ -364,6 +374,21 @@ static bool gs_mem_hash_is_valid(hash_t hash, const void *ptr, size_t mem_from, 
 #endif
 //-----###############################[HASHS:real static]#################################################
 
+//+++++###############################[FOR DATA CANARY]#################################################
+#ifdef CANARY_FOR_DATA
+
+#ifdef CANARY_FD_USE_PTR
+#define __gs_get_left_data_canary(data_ptr) (LEFT_CANARY ^ (canary_t)(data_ptr))
+#define __gs_get_right_data_canary(data_ptr) (RIGHT_CANARY ^ (canary_t)(data_ptr))
+#else
+#define __gs_get_left_data_canary(data_ptr) (LEFT_CANARY)
+#define __gs_get_right_data_canary(data_ptr) (RIGHT_CANARY)
+#endif
+
+#endif
+
+//-----###############################[FOR DATA CANARY]#################################################
+
 //+++++###############################[IS_VALID]#################################################
 #define generic_stack_is_valid(T) GLUE(generic_stack_is_valid_, T)
 #define __generic_stack_valid_canary(T) GLUE(__generic_stack_valid_canary_, T)
@@ -477,7 +502,7 @@ GENERIC_STACK_ENUM_VALIDATE __generic_stack_valid_data_canary(GENERIC_STACK_TYPE
     }
     canary_valid = 0b11;
 
-    canary_valid ^= (left_canary == LEFT_CANARY) + ((right_canary == RIGHT_CANARY) << 1);
+    canary_valid ^= (left_canary == __gs_get_left_data_canary(self->ptr)) + ((right_canary == __gs_get_right_data_canary(self->ptr)) << 1);
     switch (canary_valid) {
     case 0b01:return GS_LEFT_DATA_CANARY_NOT_VALID;
     case 0b10:return GS_RIGHT_DATA_CANARY_NOT_VALID;
@@ -813,12 +838,10 @@ GENERIC_STACK_TYPE *__generic_stack_calloc(GENERIC_STACK_TYPE) (size_t capacity 
         void *data_ptr = calloc(1, needable_byte);
         if (!data_ptr) { GS_ALLOC_EXIT(); }
 
-        #ifdef CANARY_FOR_DATA
-        ((canary_t *)data_ptr)[0] = LEFT_CANARY;
-        #endif
         ptr = (GENERIC_STACK_TYPE *)(((char *)data_ptr) + add_size - minus_size);
         #ifdef CANARY_FOR_DATA
-        ((canary_t *)(ptr + capacity))[0] = RIGHT_CANARY;
+        ((canary_t *)data_ptr)[0] = __gs_get_left_data_canary(ptr);
+        ((canary_t *)(ptr + capacity))[0] = __gs_get_right_data_canary(ptr);
         #endif
         #else //defined(CANARY_FOR_DATA) || defined(HASH_DATA)
         ptr = calloc(capacity, sizeof(GENERIC_STACK_TYPE));
@@ -874,14 +897,11 @@ GENERIC_STACK_TYPE *__generic_stack_realloc(GENERIC_STACK_TYPE) (GENERIC_STACK_T
         GS_ALLOC_EXIT();
     }
 
-    #ifdef CANARY_FOR_DATA
-    ((canary_t *)temp_ptr)[0] = LEFT_CANARY;
-    #endif
-
     ptr = (GENERIC_STACK_TYPE *)((char *)temp_ptr + minus_size);
 
     #ifdef CANARY_FOR_DATA
-    ((canary_t *)(ptr + new_capacity))[0] = RIGHT_CANARY;
+    ((canary_t *)temp_ptr)[0] = __gs_get_left_data_canary(ptr);
+    ((canary_t *)(ptr + new_capacity))[0] = __gs_get_right_data_canary(ptr);
     #endif
 
     return ptr;
@@ -1256,6 +1276,10 @@ static bool  generic_stack_more_eq(GENERIC_STACK_TYPE) GS_COMPARE_PARAMS
 #undef RIGHT_CANARY
 #endif
 
+#ifdef CANARY_FD_USE_PTR
+#undef __gs_get_left_data_canary
+#undef __gs_get_right_data_canary
+#endif
 //-----################################[UNDEFS]#############################################
 
 #endif
