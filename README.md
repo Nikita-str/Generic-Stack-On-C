@@ -19,4 +19,5 @@ macros:
 - ELEM_DUMPABLE : allow to log stack elems, but for use it you should realise appropriate function  
 - COMPARABLE : allow to compare two stack, but for it you should realise appropriate function  
 - CANARY_FS_USE_PTR : use struct ptr in struct canaries  
+- CANARY_FD_USE_PTR : use data ptr in data canaries  |  i think it it is pointless i.e. [LEFT_|RIGHT_]CANARIES already has good bits and xor with ptr make many zeros but you can think differently, so do what you want  
 - GS_WITH_ERROR_VALIDATE : allow not fall by assert, but use error param for error tracking  
